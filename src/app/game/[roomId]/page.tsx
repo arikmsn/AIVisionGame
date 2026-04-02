@@ -715,12 +715,24 @@ export default function GamePage() {
       if (data.roundId) setRoundId(data.roundId);
       setTimeout(() => inputRef.current?.focus(), 300);
 
-      // Kick off AI agents for this round (fire-and-forget)
+      // Kick off AI agents — fire-and-forget fallback for the case where the
+      // server-side after() orchestration landed on a different Vercel instance.
+      // Full round data is included so the receiving instance can reconstruct
+      // in-memory state even if it never saw the start-round request.
       if (data.roundId) {
         fetch('/api/game/orchestrate-bots', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roomId, roundId: data.roundId, hints: [] }),
+          body: JSON.stringify({
+            roomId,
+            roundId:        data.roundId,
+            hints:          [],
+            imageUrl:       data.imageUrl,
+            secretPrompt:   data.prompt,
+            roundStartTime: data.roundStartTime,
+            explanation:    data.explanation,
+            category:       data.category,
+          }),
         }).catch(() => {});
       }
     };

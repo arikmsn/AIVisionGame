@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import Pusher from 'pusher';
 import { updateGameState, getGameState, pickNextIdiomIndex, getFullGameState } from '@/lib/gameStore';
 import { IDIOMS } from '@/lib/idioms-data';
+import { runOrchestratorAsync } from '@/lib/agents/orchestrator';
 
 // Vercel Hobby tier defaults to 10s. start-round calls Fal.ai (up to 30s) so
 // we need a higher ceiling. 60s is the maximum on Hobby; Pro allows 300s.
@@ -162,22 +163,21 @@ export async function POST(request: NextRequest) {
       winner: null,
     });
 
-    // Kick off bot orchestration — fire-and-forget, must not block the response.
-    // Uses NEXT_PUBLIC_APP_URL so it works on both Vercel and localhost.
-    // Trailing slash stripped to prevent double-slash URLs like //api/game/...
-    {
-      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-      const orchUrl = `${appUrl}/api/game/orchestrate-bots`;
-      console.log('[START-ROUND] 🤖 Pinging orchestrate-bots →', orchUrl, '| roomId:', roomId, '| roundId:', roundId);
-      fetch(orchUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomId, roundId }),
-      }).catch((err: any) => {
-        console.error('[START-ROUND] orchestrate-bots ping failed:', err?.message);
-      });
-      // intentionally no `await` — response is ignored; bots run independently
-    }
+    // ── Kick off bot orchestration via after() ───────────────────────────────
+    // `after()` tells Next.js / Vercel to keep this function instance alive
+    // after the HTTP response is returned, for up to maxDuration (60s).
+    // runOrchestratorAsync uses await-based sleep so the Promise stays pending
+    // and the instance stays alive while agents are guessing — unlike the
+    // previous setTimeout approach whose callbacks were discarded on response.
+    after(async () => {
+      try {
+        console.log('[START-ROUND] 🤖 [after] runOrchestratorAsync | roomId:', roomId, '| roundId:', roundId);
+        const result = await runOrchestratorAsync(roomId, roundId);
+        console.log('[START-ROUND] ✅ [after] done:', JSON.stringify(result));
+      } catch (err: any) {
+        console.error('[START-ROUND] ❌ [after] runOrchestratorAsync failed:', err?.message, '| stack:', err?.stack);
+      }
+    });
 
     // Broadcast to every client in the room.
     // Store is already written above — polling clients will find it immediately.
