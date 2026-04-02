@@ -3,6 +3,10 @@ import Pusher from 'pusher';
 import { updateGameState, getGameState, pickNextIdiomIndex, getFullGameState } from '@/lib/gameStore';
 import { IDIOMS } from '@/lib/idioms-data';
 
+// Vercel Hobby tier defaults to 10s. start-round calls Fal.ai (up to 30s) so
+// we need a higher ceiling. 60s is the maximum on Hobby; Pro allows 300s.
+export const maxDuration = 60;
+
 const FAL_KEY = process.env.FAL_KEY;
 const TIMEOUT_MS = 30000;
 const POLL_INTERVAL_MS = 1000;
@@ -72,14 +76,12 @@ export async function POST(request: NextRequest) {
   const callStart = Date.now(); // used to calculate remaining broadcast delay
   try {
     const body = await request.json();
-    roomId = body.roomId;
+    // Fall back to 'lobby' so a missing roomId never hard-errors — the room
+    // will be created on first access rather than returning a 400.
+    roomId = body.roomId || 'lobby';
     // When > 0, the game-started broadcast is held until max(0, delayBroadcastMs - generationTime) ms
     // after image generation completes, ensuring clients don't exit the winner overlay early.
     const delayBroadcastMs: number = body.delayBroadcastMs ?? 0;
-
-    if (!roomId) {
-      return NextResponse.json({ error: 'roomId required' }, { status: 400 });
-    }
 
     // ── GATE 1: Race-condition lock ──────────────────────────────────────────
     // If another request is already generating for this room, return the
@@ -159,6 +161,23 @@ export async function POST(request: NextRequest) {
       countdownSeconds: 5,
       winner: null,
     });
+
+    // Kick off bot orchestration — fire-and-forget, must not block the response.
+    // Uses NEXT_PUBLIC_APP_URL so it works on both Vercel and localhost.
+    // Trailing slash stripped to prevent double-slash URLs like //api/game/...
+    {
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+      const orchUrl = `${appUrl}/api/game/orchestrate-bots`;
+      console.log('[START-ROUND] 🤖 Pinging orchestrate-bots →', orchUrl, '| roomId:', roomId, '| roundId:', roundId);
+      fetch(orchUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomId, roundId }),
+      }).catch((err: any) => {
+        console.error('[START-ROUND] orchestrate-bots ping failed:', err?.message);
+      });
+      // intentionally no `await` — response is ignored; bots run independently
+    }
 
     // Broadcast to every client in the room.
     // Store is already written above — polling clients will find it immediately.

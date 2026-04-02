@@ -157,7 +157,7 @@ export default function Home() {
             Developer Docs
           </a>
           <span className="text-gray-800 text-xs">·</span>
-          <span className="text-[11px] text-gray-700">Hebrew Idioms 🇮🇱</span>
+          <span className="text-[11px] text-gray-700">Hebrew Idioms v1.0 🇮🇱</span>
         </div>
       </div>
     </div>

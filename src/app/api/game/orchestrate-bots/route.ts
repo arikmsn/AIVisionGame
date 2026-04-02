@@ -35,6 +35,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import Pusher from 'pusher';
+
+// Vercel Hobby tier defaults to 10s. orchestrate-bots runs LLM loops (~24s)
+// so we need a higher ceiling. 60s is the maximum on Hobby; Pro allows 300s.
+export const maxDuration = 60;
 import { getGameState, getScoreboard } from '@/lib/gameStore';
 import { AGENT_REGISTRY, AgentConfig } from '@/lib/agents/config';
 import { createAgentGuess, BattleBriefOptions } from '@/lib/agents/factory';
@@ -196,7 +200,7 @@ async function submitBotGuess(
 ): Promise<{ isCorrect: boolean; solveTimeMs: number }> {
   const solveTimeMs = Date.now() - roundStartTime;
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
     const res = await fetch(`${baseUrl}/api/game/validate`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -253,7 +257,7 @@ async function checkAndRevealHint(roomId: string, roundId: string): Promise<void
   console.log(`[ORCHESTRATE] 🔔 Deadlock detected for room ${roomId} — generating hint`);
 
   try {
-    const baseUrl  = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const baseUrl  = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
     const language: 'he' | 'en' = /[\u0590-\u05FF]/.test(state.secretPrompt) ? 'he' : 'en';
     const res      = await fetch(`${baseUrl}/api/game/validate`, {
       method:  'POST',
