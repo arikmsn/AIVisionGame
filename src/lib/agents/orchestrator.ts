@@ -41,7 +41,9 @@
  */
 
 import Pusher from 'pusher';
-import { getGameState, getScoreboard } from '@/lib/gameStore';
+import { getGameState, getScoreboard, updateScore, updateGameState } from '@/lib/gameStore';
+import { findIdiomByHe } from '@/lib/idioms-data';
+import { strictIdiomMatch } from '@/lib/game/idiom-match';
 import { AGENT_REGISTRY, AgentConfig } from '@/lib/agents/config';
 import { createAgentGuess, BattleBriefOptions } from '@/lib/agents/factory';
 import {
@@ -186,6 +188,11 @@ function opportunityAssessment(
 }
 
 // ── Submit guess ──────────────────────────────────────────────────────────────
+// Direct in-process implementation — no HTTP self-ping to /api/game/validate.
+// Replicates the full validate route logic:
+//   1. strictIdiomMatch for correctness (pure, zero latency)
+//   2. guess-made Pusher event (so clients see bot guesses in guess history)
+//   3. On win: updateScore + round-solved Pusher + updateGameState(winner)
 
 async function submitBotGuess(
   roomId:         string,
@@ -197,18 +204,47 @@ async function submitBotGuess(
 ): Promise<{ isCorrect: boolean; solveTimeMs: number }> {
   const solveTimeMs = Date.now() - roundStartTime;
   try {
-    const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-    const res = await fetch(`${baseUrl}/api/game/validate`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ guess, secretPrompt, roomId, playerName: agentName, language, hintUsed: false, isFast: false }),
-    });
-    const data      = await res.json();
-    const isCorrect = !!data.isCorrect;
+    // Look up the English equivalent for bilingual matching
+    const idiomEntry = findIdiomByHe(secretPrompt);
+    const secretEn   = idiomEntry?.en ?? null;
+
+    const { isCorrect } = strictIdiomMatch(guess, secretPrompt, secretEn);
     console.log(`[ORCHESTRATE] 🤖 ${agentName} → "${guess}" ${isCorrect ? '✅' : '❌'}`);
+
+    const channelName = `presence-${roomId}`;
+    const hasPusher   = !!(process.env.PUSHER_KEY && process.env.PUSHER_SECRET);
+
+    // Always broadcast guess-made so human spectators see bot guesses live
+    if (hasPusher) {
+      pusherServer.trigger(channelName, 'guess-made', {
+        player: agentName,
+        guess,
+        isCorrect,
+      }).catch(() => {});
+    }
+
+    // On a correct guess: update scoreboard, fire round-solved, flip phase
+    if (isCorrect && hasPusher) {
+      const points     = computeDecayedReward(solveTimeMs);
+      const scoreboard = updateScore(roomId, agentName, points, 1);
+      try {
+        await pusherServer.trigger(channelName, 'round-solved', {
+          winner:     agentName,
+          secret:     secretPrompt,
+          points,
+          scoreboard,
+          nextRoundIn: 5,
+        });
+        console.log(`[ORCHESTRATE] 🏆 round-solved → ${channelName} | winner: ${agentName} | pts: ${points}`);
+      } catch (pusherErr: any) {
+        console.error(`[ORCHESTRATE] round-solved Pusher error:`, pusherErr.message);
+      }
+      updateGameState(roomId, { phase: 'winner', winner: agentName });
+    }
+
     return { isCorrect, solveTimeMs };
   } catch (err: any) {
-    console.error(`[ORCHESTRATE] Submit failed for ${agentName}:`, err.message);
+    console.error(`[ORCHESTRATE] submitBotGuess failed for ${agentName}:`, err.message, '| stack:', err?.stack);
     return { isCorrect: false, solveTimeMs };
   }
 }
@@ -250,15 +286,28 @@ async function checkAndRevealHint(roomId: string, roundId: string): Promise<void
   console.log(`[ORCHESTRATE] 🔔 Deadlock detected for room ${roomId} — generating hint`);
 
   try {
-    const baseUrl  = (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
     const language: 'he' | 'en' = /[\u0590-\u05FF]/.test(state.secretPrompt) ? 'he' : 'en';
-    const res      = await fetch(`${baseUrl}/api/game/validate`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'get-hint', secretPrompt: state.secretPrompt, language }),
-    });
-    const data  = await res.json();
-    const hint  = data.hint || (language === 'he' ? 'חשוב על ביטוי יומיומי' : 'Think about a common expression');
+    // Generate hint directly via Groq — no HTTP self-ping to /api/game/validate
+    let hint = language === 'he' ? 'חשוב על ביטוי יומיומי' : 'Think about a common expression';
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const { Groq } = await import('groq-sdk');
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        const langInstruction = language === 'he' ? 'Respond in Hebrew. Keep it short (max 8 words).' : 'Keep it short (max 8 words).';
+        const completion = await groq.chat.completions.create({
+          model: 'llama3-8b-8192',
+          messages: [
+            { role: 'system', content: `You are a hint generator for a Hebrew idiom guessing game. ${langInstruction}` },
+            { role: 'user', content: `Give a subtle hint for the idiom: "${state.secretPrompt}". Don't reveal the answer directly.` },
+          ],
+          max_tokens: 60,
+          temperature: 0.7,
+        });
+        hint = completion.choices[0]?.message?.content?.trim() || hint;
+      } catch (groqErr: any) {
+        console.error(`[ORCHESTRATE] Groq hint generation failed:`, groqErr.message);
+      }
+    }
 
     roundRevealedHints.set(key, [hint]);
     console.log(`[ORCHESTRATE] 💡 Hint: "${hint}"`);
