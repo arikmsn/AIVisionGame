@@ -1,0 +1,572 @@
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://169.254.83.107:3001
+- Environments: .env.local
+✓ Ready in 930ms
+
+ GET /api/game/state?roomId=stress-test-v3 200 in 351ms (next.js: 301ms, application-code: 50ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[STORE] 🃏 New shuffled deck for room "stress-test-v3": 100 idioms queued
+[START-ROUND] 🎨 Deck idx 15 → מרגלית לפני חזיר / Cast pearls before swine
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459ce/qTr74F3mpHmjUXuegaMvi
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 4.9s (next.js: 121ms, application-code: 4.7s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 2350ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-1e06-7241-b245-994cec0281d0/status 202 in 478ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-1e06-7241-b245-994cec0281d0/status 200 in 157ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-1e06-7241-b245-994cec0281d0 200 in 163ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ GET /api/game/state?roomId=stress-test-v3 200 in 13ms (next.js: 5ms, application-code: 8ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec7xhynx52
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=7000 (base=6963 profile=balanced jitter=37)
+[ORCHESTRATE] 📅 Claude → thinkMs=7908 (base=7816 profile=balanced jitter=92)
+ POST /api/game/orchestrate-bots 200 in 938ms (next.js: 921ms, application-code: 17ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 590ms (next.js: 579ms, application-code: 12ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 9ms (next.js: 3ms, application-code: 6ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 7ms (next.js: 3ms, application-code: 5ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 8ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 🧠 GPT-4o profile=balanced rank=2/2 pruned=0
+[ORCHESTRATE] 🧠 Claude profile=balanced rank=2/2 pruned=0
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 13ms (next.js: 6ms, application-code: 7ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "חזיר על אבנים יקרות"
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "חזיר על מטבעות"
+ POST /api/game/validate 200 in 819ms (next.js: 69ms, application-code: 750ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 729ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "חזיר על אבנים יקרות" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 89ms (next.js: 3ms, application-code: 87ms)
+ POST /api/game/validate 200 in 790ms (next.js: 3ms, application-code: 787ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 780ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "חזיר על מטבעות" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 84ms (next.js: 2ms, application-code: 82ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec7xhynx52 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 504ms (next.js: 3ms, application-code: 501ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 38 → לעשות הרים מגבעות / Make a mountain out of a molehill
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ⏳ Image ready in 2533ms — holding broadcast for 2467ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.5s (next.js: 2ms, application-code: 2.5s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 739ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-5a0b-79c1-adb4-3d12f2e7bac8/status 202 in 481ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-5a0b-79c1-adb4-3d12f2e7bac8/status 200 in 154ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-5a0b-79c1-adb4-3d12f2e7bac8 200 in 155ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec8alf9etd
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=4935 (base=7528 profile=aggressive jitter=42)
+[ORCHESTRATE] 📅 Claude → thinkMs=5625 (base=8493 profile=aggressive jitter=105)
+ POST /api/game/orchestrate-bots 200 in 8ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8alf9etd 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d0/qWHZD8i26b4Me0-buBVXl
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8alf9etd 200 in 11ms (next.js: 4ms, application-code: 7ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8alf9etd 200 in 9ms (next.js: 4ms, application-code: 5ms)
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "להיות בעין הסערה"
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8alf9etd 200 in 10ms (next.js: 4ms, application-code: 5ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "להרים את הכפפה"
+ POST /api/game/validate 200 in 885ms (next.js: 3ms, application-code: 882ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 871ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "להיות בעין הסערה" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 81ms (next.js: 3ms, application-code: 79ms)
+ POST /api/game/validate 200 in 902ms (next.js: 3ms, application-code: 899ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 891ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "להרים את הכפפה" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 81ms (next.js: 2ms, application-code: 79ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8alf9etd 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 253ms (next.js: 3ms, application-code: 250ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 45 → מחוץ לכחול / Out of the blue
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 1973µs, application-code: 5ms)
+[START-ROUND] ⏳ Image ready in 2292ms — holding broadcast for 2708ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 2ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 486ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-87f2-70a2-81e3-cf163caef2bf/status 202 in 469ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-87f2-70a2-81e3-cf163caef2bf/status 200 in 162ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-87f2-70a2-81e3-cf163caef2bf 200 in 156ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 8ms (next.js: 4ms, application-code: 4ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec8juse312
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=2850 (base=4382 profile=aggressive jitter=2)
+[ORCHESTRATE] 📅 Claude → thinkMs=6704 (base=10104 profile=aggressive jitter=136)
+ POST /api/game/orchestrate-bots 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8juse312 200 in 7ms (next.js: 1991µs, application-code: 5ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d1/BRrwjYLB1dpI0fT-xA5TW
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8juse312 200 in 9ms (next.js: 3ms, application-code: 5ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "רעם במרחק"
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8juse312 200 in 6ms (next.js: 2ms, application-code: 4ms)
+ POST /api/game/validate 200 in 506ms (next.js: 2ms, application-code: 504ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 497ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "רעם במרחק" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 83ms (next.js: 2ms, application-code: 81ms)
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8juse312 200 in 6ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 1940µs, application-code: 3ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 256ms (next.js: 1871µs, application-code: 254ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 52 → לפגוע בול / Hit the nail on the head
+[ORCHESTRATE] ⏹ Claude aborted — round ended
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[START-ROUND] ⏳ Image ready in 2306ms — holding broadcast for 2694ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 3ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 508ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-af02-7182-87d1-5ddc754126ae/status 202 in 478ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-af02-7182-87d1-5ddc754126ae/status 200 in 160ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-af02-7182-87d1-5ddc754126ae 200 in 156ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 8ms (next.js: 1889µs, application-code: 6ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec8rk2tqc7
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=3454 (base=5067 profile=aggressive jitter=160)
+[ORCHESTRATE] 📅 Claude → thinkMs=4978 (base=7452 profile=aggressive jitter=134)
+ POST /api/game/orchestrate-bots 200 in 9ms (next.js: 3ms, application-code: 6ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8rk2tqc7 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d2/yhMie45Z2UXAAmd34eJs2
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8rk2tqc7 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] ⌨️ Claude typing indicator
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8rk2tqc7 200 in 6ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "מפתח להצלחה"
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=0
+ POST /api/game/validate 200 in 730ms (next.js: 3ms, application-code: 727ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 719ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "מפתח להצלחה" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 85ms (next.js: 2ms, application-code: 83ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "להיט את הנקודה"
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8rk2tqc7 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 86ms (next.js: 2ms, application-code: 83ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 9 → בין הפטיש לסדן / Between a rock and a hard place
+ POST /api/game/validate 200 in 544ms (next.js: 2ms, application-code: 542ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 534ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "להיט את הנקודה" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 88ms (next.js: 2ms, application-code: 86ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 8ms (next.js: 4ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ⏳ Image ready in 2283ms — holding broadcast for 2717ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 1994µs, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 491ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-d564-7c11-a40a-5a5bf9024f4e/status 202 in 472ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-d564-7c11-a40a-5a5bf9024f4e/status 200 in 156ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-d564-7c11-a40a-5a5bf9024f4e 200 in 158ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 2ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec8z5chxvr
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=2658 (base=4066 profile=aggressive jitter=15)
+[ORCHESTRATE] 📅 Claude → thinkMs=5474 (base=8290 profile=aggressive jitter=85)
+ POST /api/game/orchestrate-bots 200 in 8ms (next.js: 2ms, application-code: 6ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8z5chxvr 200 in 7ms (next.js: 3ms, application-code: 5ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d3/nRVaMLi31TCASWStUUGOX
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8z5chxvr 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8z5chxvr 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "להיות בעין הסערה"
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=0
+ POST /api/game/validate 200 in 898ms (next.js: 2ms, application-code: 896ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 889ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "להיות בעין הסערה" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 86ms (next.js: 2ms, application-code: 83ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec8z5chxvr 200 in 6ms (next.js: 2ms, application-code: 3ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 1871µs, application-code: 3ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "להיות בעל פרופיל נמוך"
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 254ms (next.js: 3ms, application-code: 252ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 82 → לזרוק כפפה / Throw down the gauntlet
+ POST /api/game/validate 200 in 1021ms (next.js: 2ms, application-code: 1019ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 1013ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "להיות בעל פרופיל נמוך" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 90ms (next.js: 3ms, application-code: 87ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ⏳ Image ready in 2284ms — holding broadcast for 2716ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 2ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 493ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-fc83-7d22-9436-d4523e12a4ff/status 202 in 469ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-fc83-7d22-9436-d4523e12a4ff/status 200 in 155ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f4-fc83-7d22-9436-d4523e12a4ff 200 in 155ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec96vi4eru
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=4381 (base=6689 profile=aggressive jitter=33)
+[ORCHESTRATE] 📅 Claude → thinkMs=7300 (base=10976 profile=aggressive jitter=166)
+ POST /api/game/orchestrate-bots 200 in 8ms (next.js: 3ms, application-code: 6ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec96vi4eru 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d4/cYnDBJJFBOrPTiKZvx1Wb
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec96vi4eru 200 in 7ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec96vi4eru 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] ⌨️ Claude typing indicator
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "בפנים מול מול"
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec96vi4eru 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ POST /api/game/validate 200 in 679ms (next.js: 1867µs, application-code: 677ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 671ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "בפנים מול מול" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 87ms (next.js: 2ms, application-code: 85ms)
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=2
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec96vi4eru 200 in 6ms (next.js: 2ms, application-code: 3ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "ראש מול ראש"
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 418ms (next.js: 2ms, application-code: 416ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 73 → לפלס דרך / Pave the way
+ POST /api/game/validate 200 in 974ms (next.js: 2ms, application-code: 971ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 964ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "ראש מול ראש" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 87ms (next.js: 2ms, application-code: 85ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 9ms (next.js: 4ms, application-code: 5ms)
+[START-ROUND] ⏳ Image ready in 2320ms — holding broadcast for 2680ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 3ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 499ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-2c1f-7132-b499-7a3f86ec5fe7/status 202 in 505ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-2c1f-7132-b499-7a3f86ec5fe7/status 200 in 154ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-2c1f-7132-b499-7a3f86ec5fe7 200 in 157ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 9ms (next.js: 3ms, application-code: 5ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec9g9v1u8n
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=5097 (base=7779 profile=aggressive jitter=41)
+[ORCHESTRATE] 📅 Claude → thinkMs=6849 (base=10339 profile=aggressive jitter=129)
+ POST /api/game/orchestrate-bots 200 in 14ms (next.js: 7ms, application-code: 8ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9g9v1u8n 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d5/t8L8-i2Miq41KYRp2kr6f
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9g9v1u8n 200 in 9ms (next.js: 3ms, application-code: 6ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9g9v1u8n 200 in 5ms (next.js: 1940µs, application-code: 3ms)
+[ORCHESTRATE] ⌨️ Claude typing indicator
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9g9v1u8n 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "על המשמר"
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=0
+ POST /api/game/validate 200 in 742ms (next.js: 2ms, application-code: 740ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 733ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "על המשמר" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 83ms (next.js: 1970µs, application-code: 81ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9g9v1u8n 200 in 5ms (next.js: 2ms, application-code: 3ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 4ms, application-code: 4ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 248ms (next.js: 3ms, application-code: 245ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 23 → אחד ביד שווה שניים בשדה / A bird in hand is worth two in the bush
+[ORCHESTRATE] 💡 Claude confidence=high → "על המשמר"
+[ORCHESTRATE] ⏹ Claude discarding — round ended during LLM call
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ⏳ Image ready in 2279ms — holding broadcast for 2721ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 3ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 497ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-5b1c-7d90-9fbf-1df3938ff9ce/status 202 in 463ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-5b1c-7d90-9fbf-1df3938ff9ce/status 200 in 156ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-5b1c-7d90-9fbf-1df3938ff9ce 200 in 157ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 9ms (next.js: 3ms, application-code: 6ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 3ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 8ms (next.js: 3ms, application-code: 5ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec9pk1kzpt
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=2836 (base=4096 profile=aggressive jitter=174)
+[ORCHESTRATE] 📅 Claude → thinkMs=6377 (base=9809 profile=aggressive jitter=1)
+ POST /api/game/orchestrate-bots 200 in 9ms (next.js: 2ms, application-code: 7ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9pk1kzpt 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d6/S7IH3ToJPpmUX9yrBPL9c
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9pk1kzpt 200 in 6ms (next.js: 2ms, application-code: 3ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "עורבין תופסין"
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9pk1kzpt 200 in 6ms (next.js: 2ms, application-code: 4ms)
+ POST /api/game/validate 200 in 581ms (next.js: 2ms, application-code: 579ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 572ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "עורבין תופסין" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 79ms (next.js: 2ms, application-code: 77ms)
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9pk1kzpt 200 in 6ms (next.js: 2ms, application-code: 4ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 90ms (next.js: 3ms, application-code: 87ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 51 → להחזיק אצבעות / Keep your fingers crossed
+[ORCHESTRATE] ⏹ Claude aborted — round ended
+ GET /api/game/state?roomId=stress-test-v3 200 in 10ms (next.js: 4ms, application-code: 6ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 10ms (next.js: 4ms, application-code: 6ms)
+[START-ROUND] ⏳ Image ready in 2303ms — holding broadcast for 2697ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 2ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 496ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-8190-7791-9504-b78bc8216ceb/status 202 in 472ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-8190-7791-9504-b78bc8216ceb/status 200 in 157ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-8190-7791-9504-b78bc8216ceb 200 in 163ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mnec9x5lkl0a
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=2993 (base=4579 profile=aggressive jitter=17)
+[ORCHESTRATE] 📅 Claude → thinkMs=6056 (base=9317 profile=aggressive jitter=0)
+ POST /api/game/orchestrate-bots 200 in 11ms (next.js: 3ms, application-code: 7ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9x5lkl0a 200 in 8ms (next.js: 3ms, application-code: 4ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d7/r5s_Se-nLkTWvojRj5SGw
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9x5lkl0a 200 in 5ms (next.js: 1976µs, application-code: 3ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9x5lkl0a 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "אצבע משולשת"
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ POST /api/game/validate 200 in 1580ms (next.js: 2ms, application-code: 1577ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 1565ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "אצבע משולשת" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 84ms (next.js: 2ms, application-code: 82ms)
+[ORCHESTRATE] 🧠 Claude profile=aggressive rank=1/1 pruned=2
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mnec9x5lkl0a 200 in 9ms (next.js: 3ms, application-code: 6ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 89ms (next.js: 5ms, application-code: 83ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 34 → לשרוף גשרים / Burn your bridges
+[ORCHESTRATE] 💡 Claude confidence=high → "שניים מול אחד"
+[ORCHESTRATE] ⏹ Claude discarding — round ended during LLM call
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 3ms, application-code: 3ms)
+[START-ROUND] ⏳ Image ready in 2416ms — holding broadcast for 2584ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.4s (next.js: 3ms, application-code: 2.4s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 619ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-a840-7511-808b-ea21bd9e57a9/status 202 in 470ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-a840-7511-808b-ea21bd9e57a9/status 200 in 154ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-a840-7511-808b-ea21bd9e57a9 200 in 160ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[START-ROUND] ♻️ Active round within TTL — returning existing image for room: stress-test-v3
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 7ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[ORCHESTRATE] 🔑 Lock acquired for room stress-test-v3 round mneca4pap8fm
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=3251 (base=4944 profile=aggressive jitter=37)
+[ORCHESTRATE] 📅 Claude → thinkMs=7406 (base=11326 profile=aggressive jitter=44)
+ POST /api/game/orchestrate-bots 200 in 8ms (next.js: 2ms, application-code: 5ms)
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mneca4pap8fm 200 in 7ms (next.js: 3ms, application-code: 3ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d8/aBpbCpUMxedmuKacuAloC
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mneca4pap8fm 200 in 6ms (next.js: 2ms, application-code: 4ms)
+[ORCHESTRATE] 🧠 GPT-4o profile=aggressive rank=1/1 pruned=0
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mneca4pap8fm 200 in 8ms (next.js: 3ms, application-code: 5ms)
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "לצאת מהכלוב"
+ POST /api/game/validate 200 in 606ms (next.js: 10ms, application-code: 596ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 587ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "לצאת מהכלוב" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 83ms (next.js: 3ms, application-code: 80ms)
+[ORCHESTRATE] ⌨️ Claude typing indicator
+ GET /api/game/broadcast-intelligence?roomId=stress-test-v3&roundId=mneca4pap8fm 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+[VALIDATE] ✅ round-solved → presence-stress-test-v3 | winner: DataScientist-Lead | pts: 100
+ POST /api/game/validate 200 in 239ms (next.js: 3ms, application-code: 236ms)
+[START-ROUND] 🔑 Lock acquired for room: stress-test-v3
+[START-ROUND] 🎨 Deck idx 92 → לרדוף אחרי שני ארנבות / Chase two rabbits, catch neither
+[ORCHESTRATE] ⏹ Claude aborted — round ended
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 2ms, application-code: 3ms)
+ GET /api/game/state?roomId=stress-test-v3 200 in 5ms (next.js: 1999µs, application-code: 3ms)
+[START-ROUND] ⏳ Image ready in 2283ms — holding broadcast for 2717ms more
+[START-ROUND] 🔓 Lock released for room: stress-test-v3
+ POST /api/game/start-round 200 in 2.3s (next.js: 2ms, application-code: 2.3s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 487ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-ceda-7842-bd2b-8a850c05e2d0/status 202 in 465ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-ceda-7842-bd2b-8a850c05e2d0/status 200 in 158ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d42f5-ceda-7842-bd2b-8a850c05e2d0 200 in 155ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[VALIDATE] Next round prefetch: ✅ image ready 
+ GET /api/game/state?roomId=stress-test-v3 200 in 7ms (next.js: 3ms, application-code: 4ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-stress-test-v3 | image: https://v3b.fal.media/files/b/0a9459d9/ff-pPNdYR0fTIW5iZe03w
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-stress-test-v3
+[ORCHESTRATE] 🔓 Lock auto-released for room stress-test-v3
+ GET /game/demo-room 200 in 2.2s (next.js: 1609ms, application-code: 639ms)
+ GET /api/game/state?roomId=demo-room 200 in 22ms (next.js: 7ms, application-code: 15ms)
+ POST /api/pusher/auth 200 in 228ms (next.js: 209ms, application-code: 20ms)
+ GET /api/game/state?roomId=demo-room 200 in 31ms (next.js: 23ms, application-code: 8ms)
+[START-ROUND] 🔑 Lock acquired for room: demo-room
+[STORE] 🃏 New shuffled deck for room "demo-room": 100 idioms queued
+[START-ROUND] 🎨 Deck idx 83 → לחיות מהיד לפה / Live from hand to mouth
+ GET /api/game/state?roomId=demo-room 200 in 10ms (next.js: 4ms, application-code: 6ms)
+[START-ROUND] 🔒 Generation in flight for room: demo-room — returning pending state
+[START-ROUND] 🔓 Lock released for room: demo-room
+ POST /api/game/start-round 200 in 15ms (next.js: 4ms, application-code: 11ms)
+ GET /api/game/state?roomId=demo-room 200 in 11ms (next.js: 5ms, application-code: 6ms)
+ GET /api/game/state?roomId=demo-room 200 in 10ms (next.js: 5ms, application-code: 6ms)
+[START-ROUND] 🔑 Lock acquired for room: demo-room
+[START-ROUND] 🎨 Deck idx 31 → ים של צרות / A sea of troubles
+[START-ROUND] ✅ game-started broadcast #1 → presence-demo-room | image: https://v3b.fal.media/files/b/0a94640f/_KchgcLc7qiXe88wvn4FO
+[START-ROUND] 🔓 Lock released for room: demo-room
+ POST /api/game/start-round 200 in 4.0s (next.js: 5ms, application-code: 4.0s)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 1434ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-af85-7cd3-aaa8-50602893ae0c/status 202 in 483ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-af85-7cd3-aaa8-50602893ae0c/status 200 in 162ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-af85-7cd3-aaa8-50602893ae0c 200 in 476ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🔑 Lock acquired for room demo-room round mnerujnh2430
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=7305 (base=7283 profile=balanced jitter=22)
+[ORCHESTRATE] 📅 Claude → thinkMs=11130 (base=11067 profile=balanced jitter=63)
+ POST /api/game/orchestrate-bots 200 in 18ms (next.js: 5ms, application-code: 13ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-demo-room
+[ORCHESTRATE] 🔒 Already orchestrating round mnerujnh2430 — ignoring
+ POST /api/game/orchestrate-bots 200 in 16ms (next.js: 5ms, application-code: 12ms)
+[START-ROUND] ✅ game-started broadcast #1 → presence-demo-room | image: https://v3b.fal.media/files/b/0a946410/HS1gQNhUa6xk3iFWTULzu
+[START-ROUND] 🔓 Lock released for room: demo-room
+ POST /api/game/start-round 200 in 1767ms (next.js: 3ms, application-code: 1764ms)
+ │ POST https://queue.fal.run/fal-ai/fast-lightning-sdxl 200 in 178ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-b671-7a23-85b9-5395aba7d4bd/status 202 in 162ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-b671-7a23-85b9-5395aba7d4bd/status 200 in 156ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+ │ GET https://queue.fal.run/fal-ai/fast-lightning-sdxl/requests/019d4484-b671-7a23-85b9-5395aba7d4bd 200 in 162ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🔑 Lock acquired for room demo-room round mnerulzlj7x6
+[ORCHESTRATE] 📅 GPT-4o → thinkMs=5659 (base=5586 profile=balanced jitter=73)
+[ORCHESTRATE] 📅 Claude → thinkMs=7140 (base=7037 profile=balanced jitter=103)
+ POST /api/game/orchestrate-bots 200 in 18ms (next.js: 6ms, application-code: 11ms)
+[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-demo-room
+[ORCHESTRATE] 🔒 Already orchestrating round mnerulzlj7x6 — ignoring
+ POST /api/game/orchestrate-bots 200 in 12ms (next.js: 4ms, application-code: 8ms)
+[ORCHESTRATE] ⌨️ GPT-4o typing indicator
+[ORCHESTRATE] ⌨️ Claude typing indicator
+[ORCHESTRATE] 🧠 GPT-4o profile=balanced rank=2/2 pruned=0
+[ORCHESTRATE] ⏹ GPT-4o aborted — round ended
+[ORCHESTRATE] 💡 GPT-4o confidence=high → "לגלות את אמריקה מחדש"
+[ORCHESTRATE] 🧠 Claude profile=balanced rank=2/2 pruned=0
+ POST /api/game/validate 200 in 787ms (next.js: 6ms, application-code: 781ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 764ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 GPT-4o → "לגלות את אמריקה מחדש" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 94ms (next.js: 6ms, application-code: 88ms)
+[ORCHESTRATE] 💡 Claude confidence=high → "לגלות את אמריקה מחדש"
+ POST /api/game/validate 200 in 634ms (next.js: 4ms, application-code: 630ms)
+ │ POST https://api.groq.com/openai/v1/chat/completions 200 in 614ms (cache skip)
+ │ │ Cache skipped reason: (auto no cache)
+[ORCHESTRATE] 🤖 Claude → "לגלות את אמריקה מחדש" ❌ wrong
+ POST /api/game/broadcast-intelligence 200 in 92ms (next.js: 6ms, application-code: 86ms)
+[ORCHESTRATE] ⏹ Claude aborted — round ended
+[ORCHESTRATE] 🔓 Lock auto-released for room demo-room
+ GET /api/game/state?roomId=demo-room 200 in 25ms (next.js: 16ms, application-code: 9ms)
+ GET /api/game/state?roomId=demo-room 200 in 15ms (next.js: 5ms, application-code: 10ms)
+[?25h

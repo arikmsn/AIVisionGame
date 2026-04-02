@@ -1,0 +1,307 @@
+[
+  {
+    "round": 1,
+    "secret": "מרגלית לפני חזיר",
+    "round_id": "mnec7xhynx52",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "balanced",
+    "claude_profile_pred": "balanced",
+    "gpt_profile_obs": "balanced",
+    "claude_profile_obs": "balanced",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 2,
+    "pruned_count": 4,
+    "pruning_example": {
+      "agent": "Claude",
+      "failed_guess": "חזיר על אבנים יקרות",
+      "pruned": [
+        "חזיר",
+        "אבנים",
+        "יקרות",
+        "מטבעות"
+      ]
+    },
+    "gpt_solve_ms": 10681,
+    "claude_solve_ms": 10419,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": 200,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 2,
+    "secret": "לעשות הרים מגבעות",
+    "round_id": "mnec8alf9etd",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 2,
+    "pruned_count": 5,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "להיות בעין הסערה",
+      "pruned": [
+        "להיות",
+        "בעין",
+        "הסערה",
+        "להרים",
+        "הכפפה"
+      ]
+    },
+    "gpt_solve_ms": 6816,
+    "claude_solve_ms": 7449,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": 200,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 3,
+    "secret": "מחוץ לכחול",
+    "round_id": "mnec8juse312",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "רעם במרחק",
+      "pruned": [
+        "רעם",
+        "במרחק"
+      ]
+    },
+    "gpt_solve_ms": 5105,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 4,
+    "secret": "לפגוע בול",
+    "round_id": "mnec8rk2tqc7",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "מפתח להצלחה",
+      "pruned": [
+        "מפתח",
+        "להצלחה"
+      ]
+    },
+    "gpt_solve_ms": 5713,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 5,
+    "secret": "בין הפטיש לסדן",
+    "round_id": "mnec8z5chxvr",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 3,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "להיות בעין הסערה",
+      "pruned": [
+        "להיות",
+        "בעין",
+        "הסערה"
+      ]
+    },
+    "gpt_solve_ms": 6002,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 6,
+    "secret": "לזרוק כפפה",
+    "round_id": "mnec96vi4eru",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "בפנים מול מול",
+      "pruned": [
+        "בפנים",
+        "מול"
+      ]
+    },
+    "gpt_solve_ms": 6763,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 7,
+    "secret": "לפלס דרך",
+    "round_id": "mnec9g9v1u8n",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 1,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "על המשמר",
+      "pruned": [
+        "המשמר"
+      ]
+    },
+    "gpt_solve_ms": 7544,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 8,
+    "secret": "אחד ביד שווה שניים בשדה",
+    "round_id": "mnec9pk1kzpt",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "עורבין תופסין",
+      "pruned": [
+        "עורבין",
+        "תופסין"
+      ]
+    },
+    "gpt_solve_ms": 5113,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 9,
+    "secret": "להחזיק אצבעות",
+    "round_id": "mnec9x5lkl0a",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "אצבע משולשת",
+      "pruned": [
+        "אצבע",
+        "משולשת"
+      ]
+    },
+    "gpt_solve_ms": 5387,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  },
+  {
+    "round": 10,
+    "secret": "לשרוף גשרים",
+    "round_id": "mneca4pap8fm",
+    "winner": "DataScientist-Lead",
+    "confidence": "human_override",
+    "gpt_profile_pred": "aggressive",
+    "claude_profile_pred": "aggressive",
+    "gpt_profile_obs": "aggressive",
+    "claude_profile_obs": "aggressive",
+    "gpt_score_before": 0,
+    "claude_score_before": 0,
+    "events_count": 1,
+    "pruned_count": 2,
+    "pruning_example": {
+      "agent": "GPT-4o",
+      "failed_guess": "לצאת מהכלוב",
+      "pruned": [
+        "לצאת",
+        "מהכלוב"
+      ]
+    },
+    "gpt_solve_ms": 5403,
+    "claude_solve_ms": null,
+    "gpt_jitter_est": 200,
+    "claude_jitter_est": null,
+    "bot_won": false,
+    "gpt_sped_up": false,
+    "claude_sped_up": false
+  }
+]

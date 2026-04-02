@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"phase === ''winner''\\\\|phase === ''drawing''\\\\|phase === ''solved''\\\\|phase === ''idle''\" src/app/api/game/start-round/route.ts src/app/api/game/validate/route.ts)",
+      "Bash(grep -n \"📡\\\\|PUSHER RECEIVED\\\\|clientFetch\\\\|fetchWithRetry\\\\|FORCE SYNC\\\\|roundStartTime\\\\|setSecretPrompt\\(data\\\\|winner\\\\|guess-made\" src/app/game/[roomId]/page.tsx)",
+      "Bash(curl -s \"http://localhost:3001/api/game/state?roomId=demo-room\")"
+    ]
+  }
+}
