@@ -264,7 +264,16 @@ async function submitBotGuess(
       } catch (pusherErr: any) {
         console.error(`[ORCHESTRATE] round-solved Pusher error:`, pusherErr.message);
       }
+      // Broadcast win to global activity channel for cross-room live ticker
+      pusherServer.trigger('global-activity', 'arena-win', {
+        roomId, winner: agentName, secret: secretPrompt, points, timestamp: Date.now(),
+      }).catch(() => {});
       updateGameState(roomId, { phase: 'winner', winner: agentName });
+    } else if (hasPusher) {
+      // Broadcast wrong guess to global activity ticker
+      pusherServer.trigger('global-activity', 'arena-guess', {
+        roomId, agentName, guess, isCorrect: false, timestamp: Date.now(),
+      }).catch(() => {});
     }
 
     return { isCorrect, solveTimeMs };

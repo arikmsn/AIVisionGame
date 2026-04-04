@@ -23,6 +23,10 @@ export interface AgentConfig {
   temperature: number;
   /** One-line description rendered on hover over the agent badge */
   description: string;
+  /** Multi-sentence agent bio shown on the landing page "Machines are Ready" card */
+  bio?: string;
+  /** Developer / creator attribution shown on the landing page */
+  developer?: string;
 }
 
 export const AGENT_REGISTRY: AgentConfig[] = [
@@ -35,6 +39,8 @@ export const AGENT_REGISTRY: AgentConfig[] = [
     thinkTimeRange: [4, 8],
     temperature: 0.3,
     description: 'Fast visual reasoner — guesses early with high confidence',
+    bio: 'Strikes fast and confidently. Analyzes visual cues with precision, prioritizing first-mover advantage before rivals can prune the search space.',
+    developer: 'OpenAI',
   },
   {
     id: 'claude-arena',
@@ -45,6 +51,8 @@ export const AGENT_REGISTRY: AgentConfig[] = [
     thinkTimeRange: [7, 12],
     temperature: 0.5,
     description: 'Patient analyst — waits for context, exploits failed guesses',
+    bio: 'Observes before striking. Converts every rival failure into negative information, narrowing the idiom space before committing to a high-confidence guess.',
+    developer: 'Anthropic',
   },
 ];
 

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { AGENT_REGISTRY } from '@/lib/agents/config';
 
 interface RoomStatus {
   id: string;
@@ -176,6 +177,57 @@ export default function Home() {
           </a>
           <span className="text-gray-800 text-xs">·</span>
           <span className="text-[11px] text-gray-700">Hebrew Idioms v1.0 🇮🇱</span>
+        </div>
+      </div>
+
+      {/* The Machines are Ready */}
+      <div className="relative z-10 w-full max-w-xs mt-12">
+        <p className="text-[10px] text-gray-600 uppercase tracking-[0.2em] font-bold mb-3 text-center">
+          The Machines are Ready
+        </p>
+        <div className="space-y-3">
+          {AGENT_REGISTRY.map((agent) => (
+            <div
+              key={agent.id}
+              className="rounded-xl p-4"
+              style={{
+                background: 'rgba(255,255,255,0.02)',
+                border: `1px solid ${agent.accentColor}22`,
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-2xl flex-shrink-0 mt-0.5">{agent.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline gap-2 mb-0.5">
+                    <span className="text-white text-sm font-bold">{agent.name}</span>
+                    {agent.developer && (
+                      <span className="text-[10px] text-gray-600">by {agent.developer}</span>
+                    )}
+                  </div>
+                  {agent.bio && (
+                    <p className="text-[11px] text-gray-500 leading-relaxed">{agent.bio}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const name = playerName.trim() || generateName();
+                  localStorage.setItem('playerName', name);
+                  router.push(`/game/${publicRooms[0]?.id ?? 'LOBBY_01'}`);
+                }}
+                className="w-full mt-3 py-2 rounded-lg text-[11px] font-bold transition-colors"
+                style={{
+                  background: `${agent.accentColor}14`,
+                  border: `1px solid ${agent.accentColor}30`,
+                  color: agent.accentColor,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = `${agent.accentColor}22`)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = `${agent.accentColor}14`)}
+              >
+                Join Battle →
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 

@@ -324,6 +324,10 @@ async function broadcastVictory({
         scoreboard,  // authoritative leaderboard for all clients
       });
       console.log(`[VALIDATE] ✅ round-solved → ${channelName} | winner: ${winner} | pts: ${points}`);
+      // Global activity ticker — cross-room live broadcast
+      pusherServer.trigger('global-activity', 'arena-win', {
+        roomId, winner, secret: secretPrompt, points, timestamp: Date.now(),
+      }).catch(() => {});
     } catch (pusherError: any) {
       console.error('[VALIDATE] Pusher error:', pusherError.message);
     }
