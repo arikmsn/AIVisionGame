@@ -3,6 +3,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
+interface RoomStatus {
+  id: string;
+  name: string;
+  description: string;
+  phase: string;
+  participantCount: number;
+  humanCount: number;
+  botCount: number;
+  hasActiveBots: boolean;
+}
+
 const COOL_NAMES = [
   'Cyber-Sphinx', 'Logic-Ghost', 'Pixel-Wizard', 'Neural-Ninja',
   'Binary-Bard', 'Data-Druid', 'Code-Crusader', 'Byte-Boss',
@@ -27,6 +38,7 @@ export default function Home() {
   // render are both empty strings, so no hydration mismatch.
   const [playerName, setPlayerName] = useState('');
   const [roomId, setRoomId] = useState('');
+  const [publicRooms, setPublicRooms] = useState<RoomStatus[]>([]);
 
   useEffect(() => {
     // Hydrate name from localStorage after mount
@@ -44,6 +56,12 @@ export default function Home() {
         })
         .catch(() => {});
     }
+
+    // Fetch public arena status
+    fetch('/api/game/rooms')
+      .then((r) => r.json())
+      .then((data) => setPublicRooms(data.rooms ?? []))
+      .catch(() => {});
   }, [router]);
 
   const handleEnter = useCallback(() => {
@@ -160,6 +178,57 @@ export default function Home() {
           <span className="text-[11px] text-gray-700">Hebrew Idioms v1.0 🇮🇱</span>
         </div>
       </div>
+
+      {/* Public Arenas */}
+      {publicRooms.length > 0 && (
+        <div className="relative z-10 w-full max-w-xs mt-10">
+          <p className="text-[10px] text-gray-600 uppercase tracking-[0.2em] font-bold mb-3 text-center">
+            Public Arenas
+          </p>
+          <div className="space-y-2">
+            {publicRooms.map((room) => (
+              <div
+                key={room.id}
+                className="flex items-center justify-between px-4 py-3 rounded-xl"
+                style={{
+                  background: 'rgba(255,255,255,0.025)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${room.phase === 'drawing' ? 'bg-emerald-400 animate-pulse' : 'bg-gray-700'}`}
+                    />
+                    <span className="text-white text-xs font-semibold truncate">{room.name}</span>
+                  </div>
+                  <p className="text-gray-600 text-[10px] mt-0.5 pl-3.5">
+                    {room.participantCount > 0
+                      ? `${room.humanCount} human${room.humanCount !== 1 ? 's' : ''} · ${room.botCount} bot${room.botCount !== 1 ? 's' : ''}`
+                      : 'Empty — be the first'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const name = playerName.trim() || generateName();
+                    localStorage.setItem('playerName', name);
+                    router.push(`/game/${room.id}`);
+                  }}
+                  className="ml-3 flex-shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-bold text-cyan-400 transition-colors"
+                  style={{
+                    background: 'rgba(6,182,212,0.08)',
+                    border: '1px solid rgba(6,182,212,0.18)',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(6,182,212,0.16)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(6,182,212,0.08)')}
+                >
+                  Join →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
