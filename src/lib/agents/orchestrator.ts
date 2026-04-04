@@ -41,9 +41,9 @@
  */
 
 import Pusher from 'pusher';
-import { getGameState, getScoreboard, updateScore, updateGameState } from '@/lib/gameStore';
+import { getGameState, getScoreboard, updateScore, updateGameState, addGuess } from '@/lib/gameStore';
 import { findIdiomByHe } from '@/lib/idioms-data';
-import { strictIdiomMatch } from '@/lib/game/idiom-match';
+import { strictIdiomMatch, normalizeText } from '@/lib/game/idiom-match';
 import { AGENT_REGISTRY, AgentConfig } from '@/lib/agents/config';
 import { createAgentGuess, BattleBriefOptions } from '@/lib/agents/factory';
 import {
@@ -118,17 +118,21 @@ declare global {
   var __roundAgentStates:     Map<string, Map<string, AgentRoundState>>   | undefined;
   var __roundRevealedHints:   Map<string, string[]>                       | undefined;
   var __hintRevealInProgress: Set<string>                                 | undefined;
+  var __roundAllGuesses:      Map<string, Set<string>>                    | undefined;
 }
 if (!globalThis.__orchestratingRooms)   globalThis.__orchestratingRooms   = new Map();
 if (!globalThis.__roundAgentStates)     globalThis.__roundAgentStates     = new Map();
 if (!globalThis.__roundRevealedHints)   globalThis.__roundRevealedHints   = new Map();
 if (!globalThis.__hintRevealInProgress) globalThis.__hintRevealInProgress = new Set();
+if (!globalThis.__roundAllGuesses)      globalThis.__roundAllGuesses      = new Map();
 
 /** roomId::roundId → agentName → state */
 const roundAgentStates:    Map<string, Map<string, AgentRoundState>> = globalThis.__roundAgentStates;
 const roundRevealedHints:  Map<string, string[]>                     = globalThis.__roundRevealedHints;
 const hintRevealInProgress: Set<string>                              = globalThis.__hintRevealInProgress;
 const orchestratingRooms:  Map<string, string>                       = globalThis.__orchestratingRooms;
+/** roomId::roundId → normalized guesses from ALL players for cross-agent dedup */
+const roundAllGuesses:     Map<string, Set<string>>                  = globalThis.__roundAllGuesses;
 
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -196,14 +200,27 @@ function opportunityAssessment(
 
 async function submitBotGuess(
   roomId:         string,
+  roundId:        string,
   agentName:      string,
   guess:          string,
   secretPrompt:   string,
   language:       'he' | 'en',
   roundStartTime: number,
-): Promise<{ isCorrect: boolean; solveTimeMs: number }> {
+): Promise<{ isCorrect: boolean; solveTimeMs: number; isDuplicate?: boolean }> {
   const solveTimeMs = Date.now() - roundStartTime;
   try {
+    // ── Cross-agent dedup ────────────────────────────────────────────────────
+    const key      = rk(roomId, roundId);
+    if (!roundAllGuesses.has(key)) roundAllGuesses.set(key, new Set());
+    const guessSet = roundAllGuesses.get(key)!;
+    const normGuess = normalizeText(guess);
+
+    if (guessSet.has(normGuess)) {
+      console.log(`[ORCHESTRATE] 🔄 ${agentName} duplicate guess "${guess}" (already guessed this round) — skipping`);
+      return { isCorrect: false, solveTimeMs, isDuplicate: true };
+    }
+    guessSet.add(normGuess);
+
     // Look up the English equivalent for bilingual matching
     const idiomEntry = findIdiomByHe(secretPrompt);
     const secretEn   = idiomEntry?.en ?? null;
@@ -213,6 +230,14 @@ async function submitBotGuess(
 
     const channelName = `presence-${roomId}`;
     const hasPusher   = !!(process.env.PUSHER_KEY && process.env.PUSHER_SECRET);
+
+    // Record in gameStore so human players and future agents see this guess
+    addGuess(roomId, {
+      id:         Date.now().toString(36) + Math.random().toString(36).slice(2),
+      playerName: agentName,
+      text:       guess,
+      timestamp:  Date.now(),
+    });
 
     // Always broadcast guess-made so human spectators see bot guesses live
     if (hasPusher) {
@@ -379,6 +404,8 @@ async function executeAgentAttempt(
 
   const situationalDirective = buildSituationalDirective(agent.name);
 
+  const allGuessesSoFar = getGameState(roomId)?.guesses?.map(g => g.text) ?? [];
+
   const battleBrief: BattleBriefOptions = {
     tElapsedMs,
     rivalFailures: events.filter(e => !e.isCorrect && e.agentName !== agent.name)
@@ -386,6 +413,7 @@ async function executeAgentAttempt(
     attemptsRemaining:   MAX_ATTEMPTS - attemptNumber,
     ownPreviousGuesses:  agentState.ownFailedGuesses,
     revealedHints:       revealedHints.length > 0 ? revealedHints : undefined,
+    allGuessHistory:     allGuessesSoFar.length > 0 ? allGuessesSoFar : undefined,
   };
 
   const fullReasoning = situationalDirective
@@ -440,9 +468,15 @@ async function executeAgentAttempt(
     return;
   }
 
-  const { isCorrect, solveTimeMs } = await submitBotGuess(
-    roomId, agent.name, guess, secretPrompt, language, roundStartTime,
+  const { isCorrect, solveTimeMs, isDuplicate } = await submitBotGuess(
+    roomId, roundId, agent.name, guess, secretPrompt, language, roundStartTime,
   );
+
+  // Duplicate guess — don't count as an attempt, just retry on next loop iteration
+  if (isDuplicate) {
+    agentState.isGuessing = false;
+    return;
+  }
 
   agentState.attemptsUsed += 1;
   agentState.isGuessing    = false;
@@ -616,6 +650,7 @@ export function runOrchestrator(
       roundAgentStates.delete(k);
       roundRevealedHints.delete(k);
       hintRevealInProgress.delete(k);
+      roundAllGuesses.delete(k);
     }
   }
 
@@ -638,6 +673,7 @@ export function runOrchestrator(
   setTimeout(() => {
     if (orchestratingRooms.get(roomId) === roundId) {
       orchestratingRooms.delete(roomId);
+      roundAllGuesses.delete(key);
       cleanupRound(roomId, roundId);
       const agentMap = roundAgentStates.get(key);
       if (agentMap) {
@@ -701,6 +737,7 @@ export async function runOrchestratorAsync(
       roundAgentStates.delete(k);
       roundRevealedHints.delete(k);
       hintRevealInProgress.delete(k);
+      roundAllGuesses.delete(k);
     }
   }
   for (const agent of AGENT_REGISTRY) {
@@ -724,6 +761,24 @@ export async function runOrchestratorAsync(
       } catch {}
 
       await sleep(jitter);
+
+      // ── Wait for imageUrl to be confirmed in game state ───────────────────
+      // game-started fires before after() runs, but clients may need imageUrl
+      // to be non-null before agents make their first guess.
+      {
+        let waited = 0;
+        while (!getGameState(roomId)?.imageUrl && waited < 10_000) {
+          await sleep(500);
+          waited += 500;
+        }
+        if (!getGameState(roomId)?.imageUrl) {
+          console.log(`[ORCHESTRATE] ⏹ Async: ${agent.name} — imageUrl not available after ${waited}ms, aborting`);
+          return;
+        }
+        if (waited > 0) {
+          console.log(`[ORCHESTRATE] 🖼 ${agent.name} — imageUrl confirmed after ${waited}ms`);
+        }
+      }
 
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const cur = getGameState(roomId);
@@ -749,6 +804,7 @@ export async function runOrchestratorAsync(
   // Release lock
   if (orchestratingRooms.get(roomId) === roundId) {
     orchestratingRooms.delete(roomId);
+    roundAllGuesses.delete(key);
     cleanupRound(roomId, roundId);
   }
 

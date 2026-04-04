@@ -291,6 +291,11 @@ export interface BattleBriefOptions {
    * Injected into the brief so retry attempts can leverage the hint.
    */
   revealedHints?: string[];
+  /**
+   * Full guess history from ALL players this round (bots + humans).
+   * Used to enforce strict no-repeat across the entire room.
+   */
+  allGuessHistory?: string[];
 }
 
 /**
@@ -337,6 +342,15 @@ ${opts.revealedHints!.map(h => `  → ${h}`).join('\n')}
 ║  enough to win. Skip it if you're     ║
 ║  already confident — save the 150.    ║` : '';
 
+  const allHistoryBlock = (opts.allGuessHistory?.length ?? 0) > 0 ? `
+╠═══════════════════════════════════════╣
+║  📋 ALL ROOM GUESSES (ALL PLAYERS)   ║
+╠═══════════════════════════════════════╣
+${opts.allGuessHistory!.map(g => `  ✗ "${g}"`).join('\n')}
+║ STRICT RULE: Do NOT repeat any of    ║
+║ these. They are permanently BANNED.   ║
+║ Repeating a banned guess = ZLE.       ║` : '';
+
   return `
 ╔═══════════════════════════════════════╗
 ║         BATTLE BRIEF — LIVE DATA      ║
@@ -346,7 +360,7 @@ ${opts.revealedHints!.map(h => `  → ${h}`).join('\n')}
 ║ ${attemptsLine}
 ╠═══════════════════════════════════════╣
 ║ RIVAL FAILURES THIS ROUND:            ║
-${failLines}${persistenceBlock}${hintBlock}
+${failLines}${persistenceBlock}${hintBlock}${allHistoryBlock}
 ╠═══════════════════════════════════════╣
 ║ COMMAND: Do NOT repeat rival failures.║
 ║ Analyze what failed guesses RULE OUT. ║
@@ -462,6 +476,13 @@ async function visionGuess(
 
     const { rationale, guess } = parseRationaleResponse(raw);
     if (!guess) return null;
+
+    // Detect model safety refusals — treat as transient failure so text fallback runs
+    const REFUSAL_MARKERS = ["i'm sorry", "i cannot", "i can't", "as an ai", "i'm not able", "i am not able", "i apologize", "sorry, i"];
+    if (REFUSAL_MARKERS.some(m => guess.toLowerCase().includes(m))) {
+      console.warn(`[FACTORY] ⚠️ ${config.name} safety refusal detected — falling back to text`);
+      return null;
+    }
 
     console.log(`[FACTORY] 📝 ${config.name} (${config.model}) rationale="${rationale.slice(0, 80)}..."`);
 

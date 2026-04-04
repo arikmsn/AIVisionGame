@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Groq } from 'groq-sdk';
 import Pusher from 'pusher';
-import { updateGameState, updateScore } from '@/lib/gameStore';
+import { updateGameState, updateScore, addGuess } from '@/lib/gameStore';
 import { IDIOMS, findIdiomByHe } from '@/lib/idioms-data';
 
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
@@ -169,6 +169,16 @@ Give a helpful hint that guides without revealing. Focus on the meaning of the i
         guess,
         isCorrect: localResult.isCorrect,
       }).catch(() => {});
+    }
+
+    // Track guess in gameStore so bots see all player activity this round
+    if (roomId && playerName) {
+      addGuess(roomId, {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+        playerName,
+        text: guess,
+        timestamp: Date.now(),
+      });
     }
 
     // ── STEP 3: FAST PATH — local match confirmed correct ────────────────────

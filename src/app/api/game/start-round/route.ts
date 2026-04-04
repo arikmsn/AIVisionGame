@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
       countdownActive: false,
       countdownSeconds: 5,
       winner: null,
+      guesses: [],
     });
 
     // ── Kick off bot orchestration via after() ───────────────────────────────
