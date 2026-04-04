@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Groq } from 'groq-sdk';
 import Pusher from 'pusher';
-import { updateGameState, updateScore, addGuess } from '@/lib/gameStore';
+import { updateGameState, updateScore, addGuess, getGameState } from '@/lib/gameStore';
 import { IDIOMS, findIdiomByHe } from '@/lib/idioms-data';
+import { extractBearerToken, resolveAgentKey } from '@/lib/agents/api-keys';
 
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
@@ -91,7 +92,23 @@ function strictIdiomMatch(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { guess, action, secretPrompt, roomId, playerName, language, hintUsed, isFast } = body;
+    let { guess, action, secretPrompt, roomId, playerName, language, hintUsed, isFast } = body;
+
+    // External agents authenticate with a Bearer token.
+    // When present: resolve identity and fill in secretPrompt from current round state.
+    const token = extractBearerToken(request.headers.get('Authorization'));
+    if (token) {
+      const identity = resolveAgentKey(token);
+      if (!identity) {
+        return NextResponse.json({ error: 'INVALID_API_KEY', message: 'Unrecognised API key' }, { status: 401 });
+      }
+      playerName   = identity.agentName;
+      // Agent doesn't send secretPrompt — resolve it from current round state
+      if (!secretPrompt && roomId) {
+        secretPrompt = getGameState(roomId)?.secretPrompt ?? undefined;
+      }
+    }
+
     const isHebrew = language === 'he';
 
     if (action === 'get-prompt') {

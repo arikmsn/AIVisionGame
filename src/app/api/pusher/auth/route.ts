@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Pusher from 'pusher';
+import { extractBearerToken, resolveAgentKey } from '@/lib/agents/api-keys';
 
 const pusher = new Pusher({
   appId: process.env.PUSHER_APP_ID || '',
@@ -23,11 +24,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // External agents authenticate with a Bearer token.
+    // When valid, use their stable agentId as the Pusher presence user_id
+    // so they appear consistently in presence member lists.
+    let userId = socketId;
+    let userInfo: Record<string, string> = {};
+
+    const token = extractBearerToken(req.headers.get('Authorization'));
+    if (token) {
+      const identity = resolveAgentKey(token);
+      if (identity) {
+        userId   = identity.agentId;
+        userInfo = { agentName: identity.agentName };
+        console.log(`[PUSHER_AUTH] External agent authenticated: ${identity.agentName} (${identity.agentId})`);
+      }
+    }
+
     // Presence channels require user_data in the auth response.
     // Without it, pusher:subscription_succeeded never fires and the client
-    // receives no events. Use socket_id as a stable per-connection user_id.
+    // receives no events.
     const presenceData = channelName.startsWith('presence-')
-      ? { user_id: socketId, user_info: {} }
+      ? { user_id: userId, user_info: userInfo }
       : undefined;
 
     const auth = pusher.authenticate(socketId, channelName, presenceData as any);
