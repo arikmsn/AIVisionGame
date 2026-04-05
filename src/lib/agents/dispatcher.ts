@@ -256,12 +256,12 @@ async function probeGroq(modelId: string, imageUrl: string): Promise<{ guess: st
 
 async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
   // Use fileData.fileUri — Google's infra can fetch fal.ai CDN URLs directly.
-  // Notes on Gemini 2.5 thinking models:
-  //   - responseMimeType:'application/json' is NOT used — it can conflict with
-  //     extended thinking in Pro, causing empty text() output.
-  //   - maxOutputTokens:1024 gives enough room for JSON after thinking tokens.
-  //   - If response.text() returns empty, we throw so the caller gets an ERROR
-  //     badge instead of a misleading false-CORRECT (empty guess matches everything).
+  // Gemini 2.5 Pro/Flash are thinking models — by default they spend all tokens
+  // on reasoning and may return empty text(). Fix:
+  //   - thinkingBudget:0 disables extended thinking (valid REST param, not in SDK 0.24.1 types)
+  //   - maxOutputTokens:1024 provides ample room for the JSON response
+  //   - Extract text from parts[] directly as fallback in case text() returns ""
+  //   - Throw when still empty so caller shows ERROR badge (not phantom CORRECT)
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
   const model = genAI.getGenerativeModel({ model: modelId });
 
@@ -270,10 +270,19 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
       { text: SYSTEM_PROMPT },
       { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } },
     ]}],
-    generationConfig: { maxOutputTokens: 1024 },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    generationConfig: { maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } } as any,
   });
-  const rawText = result.response.text().trim();
-  if (!rawText) throw new Error('Gemini returned empty response (possible thinking-only output)');
+
+  // Try text() first; if empty, walk parts[] looking for a non-thinking text part
+  let rawText = result.response.text().trim();
+  if (!rawText) {
+    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+    rawText = parts.find((p: any) => p.text && !p.thought)?.text?.trim()
+           ?? parts.find((p: any) => p.text)?.text?.trim()
+           ?? '';
+  }
+  if (!rawText) throw new Error('Gemini returned empty response (thinking-only output)');
   return parseGuessResponse(rawText);
 }
 
