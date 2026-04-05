@@ -280,9 +280,7 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
       { text: SYSTEM_PROMPT },
       imagePart,
     ]}],
-    // thinkingConfig not typed in SDK 0.24.1 but is a valid REST param
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    generationConfig: { maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } } as any,
+    generationConfig: { maxOutputTokens: 1024 },
   });
 
   // Try text() first; if empty, walk parts[] for a non-thinking text part
