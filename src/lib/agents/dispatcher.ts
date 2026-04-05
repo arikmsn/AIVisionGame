@@ -143,15 +143,15 @@ export const ARENA_AGENTS: AgentConfig[] = [
     accentColor:   '#a855f7',
     icon:          '🟣',
   },
-  // ── DeepSeek (via Replicate) ─────────────────────────────────────────────────
+  // ── OpenAI mini tier ─────────────────────────────────────────────────────────
   {
-    modelId:       'deepseek-ai/deepseek-vl2',
-    provider:      'replicate',
-    label:         'DeepSeek-VL2',
-    providerLabel: 'Replicate',
-    envKey:        'REPLICATE_API_TOKEN',
-    accentColor:   '#3b82f6',
-    icon:          '💎',
+    modelId:       'gpt-4.1-mini',
+    provider:      'openai',
+    label:         'GPT-4.1 Mini',
+    providerLabel: 'OpenAI',
+    envKey:        'OPENAI_API_KEY',
+    accentColor:   '#34d399',
+    icon:          '🌿',
   },
 ];
 
