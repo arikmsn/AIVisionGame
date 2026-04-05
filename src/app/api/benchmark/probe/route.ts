@@ -11,7 +11,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { dispatchProbe } from '@/lib/agents/dispatcher';
+import { dispatchProbe }          from '@/lib/agents/dispatcher';
+import { insertBenchmarkResult }  from '@/lib/db/benchmark-results';
 
 export const maxDuration = 60;
 
@@ -68,6 +69,23 @@ export async function POST(request: NextRequest) {
       (result.error ? ` | ERROR: ${result.error}` : '') +
       (result.isKeyMissing ? ' | KEY_MISSING' : ''),
     );
+
+    // Persist result to Supabase — fire-and-forget, never block the HTTP response.
+    // Errors and key-missing cases are logged too so we can track provider reliability.
+    if (phrase) {
+      insertBenchmarkResult({
+        idiomPhrase: phrase,
+        modelId:     result.modelId,
+        guess:       result.guess     ?? '',
+        isCorrect,
+        latencyMs:   result.latencyMs ?? null,
+        strategy:    result.strategy  ?? '',
+        imageUrl:    imageUrl         ?? '',
+        error:       result.isKeyMissing
+          ? 'key_missing'
+          : (result.error ?? undefined),
+      }).catch(() => {}); // swallow — never let logging block the benchmark
+    }
 
     return NextResponse.json({ ...result, isCorrect });
   } catch (err: any) {

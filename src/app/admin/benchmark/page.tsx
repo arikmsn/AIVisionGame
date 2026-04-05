@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { BENCHMARK_AGENTS, type AgentConfig } from '@/lib/agents/dispatcher';
 import type { IdiomDifficulty } from '@/lib/benchmark/idioms';
 
@@ -289,6 +289,297 @@ function LoadingSkeleton({ width, color }: { width: string; color: string }) {
       backgroundSize: '200% 100%',
       animation:    'shimmer 1.5s infinite',
     }} />
+  );
+}
+
+// ── Global Stats Types ─────────────────────────────────────────────────────────
+
+interface LeaderboardEntry {
+  modelId:         string;
+  label:           string;
+  icon:            string;
+  accentColor:     string;
+  totalRuns:       number;
+  correctCount:    number;
+  successRate:     number;
+  avgLatencyMs:    number | null;
+  errorCount:      number;
+  reliabilityRate: number;
+}
+
+interface StatsPayload {
+  leaderboard:   LeaderboardEntry[];
+  speedKing:     { modelId: string; label: string; icon: string; avgLatencyMs: number } | null;
+  hardestIdioms: { phrase: string; failCount: number; totalAttempts: number; failRate: number }[];
+  totalRuns:     number;
+  totalCorrect:  number;
+}
+
+// ── Global Stats Component ─────────────────────────────────────────────────────
+
+function GlobalStats({ refreshKey }: { refreshKey: number }) {
+  const [stats,   setStats]   = useState<StatsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/benchmark/stats')
+      .then(r => r.json())
+      .then((data: StatsPayload) => { setStats(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [refreshKey]);
+
+  const cell: React.CSSProperties = {
+    padding:      '7px 10px',
+    fontSize:     '12px',
+    color:        '#d1d5db',
+    borderBottom: '1px solid rgba(255,255,255,0.04)',
+    whiteSpace:   'nowrap',
+  };
+  const hcell: React.CSSProperties = {
+    ...cell,
+    fontSize:     '10px',
+    color:        '#4b5563',
+    fontFamily:   'monospace',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    fontWeight:   700,
+    borderBottom: '1px solid rgba(255,255,255,0.08)',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ marginTop: '40px', paddingTop: '32px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ fontSize: '13px', color: '#374151', fontFamily: 'monospace' }}>
+          ⟳ Loading global stats…
+        </div>
+      </div>
+    );
+  }
+
+  const noData = !stats || stats.totalRuns === 0;
+
+  return (
+    <div style={{
+      marginTop:  '40px',
+      paddingTop: '32px',
+      borderTop:  '1px solid rgba(255,255,255,0.06)',
+      animation:  'fadeIn 0.5s ease',
+    }}>
+      {/* Section header */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '20px' }}>
+        <div style={{
+          fontWeight:     700,
+          fontSize:       '15px',
+          letterSpacing:  '-0.02em',
+          background:     'linear-gradient(135deg,#60a5fa,#a78bfa)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
+          📊 Global Stats
+        </div>
+        {stats && stats.totalRuns > 0 && (
+          <div style={{ fontSize: '11px', color: '#4b5563', fontFamily: 'monospace' }}>
+            {stats.totalRuns.toLocaleString()} runs · {stats.totalCorrect.toLocaleString()} correct
+            ({Math.round((stats.totalCorrect / stats.totalRuns) * 100)}% overall)
+          </div>
+        )}
+      </div>
+
+      {noData ? (
+        <div style={{
+          padding:      '40px',
+          textAlign:    'center',
+          color:        '#374151',
+          fontSize:     '13px',
+          background:   'rgba(255,255,255,0.02)',
+          borderRadius: '12px',
+          border:       '1px solid rgba(255,255,255,0.04)',
+        }}>
+          No benchmark runs recorded yet — results will appear here after the first run.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+
+          {/* ── Leaderboard ── */}
+          <div style={{
+            flex:         '1 1 520px',
+            background:   'rgba(255,255,255,0.02)',
+            border:       '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '12px',
+            overflow:     'hidden',
+          }}>
+            <div style={{
+              padding:      '12px 14px',
+              fontSize:     '12px',
+              fontWeight:   700,
+              color:        '#9ca3af',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              display:      'flex',
+              alignItems:   'center',
+              gap:          '6px',
+            }}>
+              🏆 Leaderboard — Success Rate
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...hcell, width: '28px', textAlign: 'center' }}>#</th>
+                  <th style={{ ...hcell }}>Model</th>
+                  <th style={{ ...hcell, textAlign: 'right' }}>Runs</th>
+                  <th style={{ ...hcell, textAlign: 'right' }}>Win %</th>
+                  <th style={{ ...hcell, textAlign: 'right' }}>Avg ms</th>
+                  <th style={{ ...hcell, textAlign: 'right' }}>Reliability</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats!.leaderboard.map((m, i) => (
+                  <tr key={m.modelId} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                    <td style={{ ...cell, textAlign: 'center', color: i < 3 ? ['#fbbf24','#9ca3af','#b45309'][i] : '#4b5563', fontWeight: 700 }}>
+                      {i + 1}
+                    </td>
+                    <td style={{ ...cell }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{m.icon}</span>
+                        <span style={{ color: m.accentColor, fontWeight: 600, fontFamily: 'monospace', fontSize: '11px' }}>
+                          {m.label}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right', color: '#6b7280' }}>
+                      {m.totalRuns}
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right' }}>
+                      {/* Success rate bar + number */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                        <div style={{ width: '48px', height: '4px', background: 'rgba(255,255,255,0.06)', borderRadius: '99px', overflow: 'hidden' }}>
+                          <div style={{
+                            height:     '100%',
+                            width:      `${m.successRate}%`,
+                            background: m.successRate >= 50 ? '#10b981' : m.successRate >= 25 ? '#f59e0b' : '#ef4444',
+                            borderRadius: '99px',
+                          }} />
+                        </div>
+                        <span style={{
+                          color:      m.successRate >= 50 ? '#10b981' : m.successRate >= 25 ? '#f59e0b' : '#ef4444',
+                          fontFamily: 'monospace',
+                          fontWeight: 700,
+                          fontSize:   '11px',
+                          minWidth:   '36px',
+                        }}>
+                          {m.successRate}%
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right', fontFamily: 'monospace', color: m.avgLatencyMs !== null
+                      ? m.avgLatencyMs < 3000 ? '#10b981' : m.avgLatencyMs < 8000 ? '#f59e0b' : '#ef4444'
+                      : '#4b5563' }}>
+                      {m.avgLatencyMs !== null ? `${(m.avgLatencyMs / 1000).toFixed(1)}s` : '—'}
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right', fontFamily: 'monospace', fontSize: '11px',
+                      color: m.reliabilityRate >= 90 ? '#10b981' : m.reliabilityRate >= 70 ? '#f59e0b' : '#ef4444' }}>
+                      {m.reliabilityRate}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ padding: '8px 14px', fontSize: '10px', color: '#374151', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+              Win % = correct guesses / total runs · Reliability = non-error runs / total runs
+            </div>
+          </div>
+
+          {/* ── Right column: Speed King + Hardest Idioms ── */}
+          <div style={{ flex: '0 1 260px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+            {/* Speed King */}
+            {stats!.speedKing && (
+              <div style={{
+                background:   'rgba(255,255,255,0.02)',
+                border:       '1px solid rgba(16,185,129,0.2)',
+                borderRadius: '12px',
+                padding:      '14px',
+              }}>
+                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  ⚡ Speed King
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>
+                    {stats!.leaderboard.find(m => m.modelId === stats!.speedKing!.modelId)?.icon ?? '🤖'}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#10b981' }}>
+                      {stats!.speedKing.label}
+                    </div>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#34d399', fontFamily: 'monospace', lineHeight: 1.2 }}>
+                      {stats!.speedKing.avgLatencyMs !== null
+                        ? stats!.speedKing.avgLatencyMs < 1000
+                          ? `${stats!.speedKing.avgLatencyMs}ms`
+                          : `${(stats!.speedKing.avgLatencyMs / 1000).toFixed(1)}s`
+                        : '—'}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#4b5563', marginTop: '1px' }}>
+                      average latency
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Hardest Idioms */}
+            {stats!.hardestIdioms.length > 0 && (
+              <div style={{
+                background:   'rgba(255,255,255,0.02)',
+                border:       '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '12px',
+                overflow:     'hidden',
+              }}>
+                <div style={{
+                  padding:      '10px 14px',
+                  fontSize:     '11px',
+                  fontWeight:   700,
+                  color:        '#9ca3af',
+                  borderBottom: '1px solid rgba(255,255,255,0.06)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}>
+                  🧩 Hardest Idioms
+                </div>
+                {stats!.hardestIdioms.map((idiom, i) => (
+                  <div key={idiom.phrase} style={{
+                    padding:      '8px 14px',
+                    borderBottom: i < stats!.hardestIdioms.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none',
+                    display:      'flex',
+                    alignItems:   'center',
+                    justifyContent: 'space-between',
+                    gap:          '8px',
+                  }}>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#d1d5db', fontStyle: 'italic' }}>
+                        "{idiom.phrase}"
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '1px' }}>
+                        {idiom.failCount}/{idiom.totalAttempts} models failed
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize:     '12px',
+                      fontWeight:   700,
+                      fontFamily:   'monospace',
+                      color:        idiom.failRate >= 80 ? '#ef4444' : idiom.failRate >= 60 ? '#f59e0b' : '#9ca3af',
+                      minWidth:     '36px',
+                      textAlign:    'right',
+                    }}>
+                      {idiom.failRate}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -754,6 +1045,10 @@ export default function BenchmarkPage() {
           <span>KEY MISSING = env var not set</span>
           <span>⚡ = response latency</span>
         </div>
+
+        {/* ── Global Stats ── refreshKey increments after each run so stats reload */}
+        <GlobalStats refreshKey={runCount} />
+
       </main>
     </div>
   );
