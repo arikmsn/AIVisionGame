@@ -30,14 +30,18 @@ function checkCorrect(guess: string, phrase: string): boolean {
   const gNorm = normalise(guess);
   const pNorm = normalise(phrase);
 
+  // Empty or trivial guess is never correct
+  if (!gNorm || gNorm.length < 2) return false;
+
   // Exact match after normalisation
   if (gNorm === pNorm) return true;
   if (gNorm.includes(pNorm)) return true;
   if (pNorm.includes(gNorm) && gNorm.length > 4) return true;
 
   // All significant words of phrase appear in guess
+  // Guard: only match non-empty guess words to avoid empty-string wildcard
   const pWords = pNorm.split(' ').filter(w => w.length > 2);
-  const gWords = gNorm.split(' ');
+  const gWords = gNorm.split(' ').filter(w => w.length > 0);
   const matched = pWords.filter(pw => gWords.some(gw => gw === pw || gw.includes(pw) || pw.includes(gw)));
   return matched.length === pWords.length && pWords.length > 0;
 }

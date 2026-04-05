@@ -255,8 +255,13 @@ async function probeGroq(modelId: string, imageUrl: string): Promise<{ guess: st
 }
 
 async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  // Use fileData.fileUri — Google's infra can fetch fal.ai CDN URLs directly,
-  // avoiding the base64 round-trip entirely. Confirmed working with Gemini 2.5.
+  // Use fileData.fileUri — Google's infra can fetch fal.ai CDN URLs directly.
+  // Notes on Gemini 2.5 thinking models:
+  //   - responseMimeType:'application/json' is NOT used — it can conflict with
+  //     extended thinking in Pro, causing empty text() output.
+  //   - maxOutputTokens:1024 gives enough room for JSON after thinking tokens.
+  //   - If response.text() returns empty, we throw so the caller gets an ERROR
+  //     badge instead of a misleading false-CORRECT (empty guess matches everything).
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
   const model = genAI.getGenerativeModel({ model: modelId });
 
@@ -265,9 +270,11 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
       { text: SYSTEM_PROMPT },
       { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } },
     ]}],
-    generationConfig: { maxOutputTokens: 256, responseMimeType: 'application/json' },
+    generationConfig: { maxOutputTokens: 1024 },
   });
-  return parseGuessResponse(result.response.text());
+  const rawText = result.response.text().trim();
+  if (!rawText) throw new Error('Gemini returned empty response (possible thinking-only output)');
+  return parseGuessResponse(rawText);
 }
 
 async function probeReplicate(imageUrl: string): Promise<{ guess: string; strategy: string }> {
