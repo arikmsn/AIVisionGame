@@ -595,6 +595,28 @@ function GlobalStats({ refreshKey }: { refreshKey: number }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
+// ── Arena Round Types ──────────────────────────────────────────────────────────
+
+interface ArenaGuessRecord {
+  modelId: string; attempt: number; wave: number; action: string;
+  guessText: string | null; confidence: number; reasoning: string;
+  tMsFromStart: number; isCorrect: boolean; pointsAwarded: number;
+  latencyMs: number; isKeyMissing: boolean; error?: string;
+}
+
+interface ArenaModelResult {
+  modelId: string; label: string; icon: string; attemptsUsed: number;
+  finalScore: number; guesses: ArenaGuessRecord[]; warmupLatencyMs: number | null;
+  warmupOk: boolean; bestGuess: string | null; isCorrect: boolean; reasoning: string;
+}
+
+interface ArenaRoundResult {
+  roundId: string; idiomPhrase: string; imageUrl: string;
+  tStartIso: string; tEndIso: string; durationMs: number;
+  models: ArenaModelResult[];
+  winner: { modelId: string; label: string; score: number; tMs: number } | null;
+}
+
 export default function BenchmarkPage() {
   const [run,        setRun]        = useState<BenchmarkRun | null>(null);
   const [cards,      setCards]      = useState<Record<string, CardState>>(
@@ -606,6 +628,11 @@ export default function BenchmarkPage() {
   const [difficulty, setDifficulty] = useState<IdiomDifficulty | 'random'>('random');
   const [runCount,   setRunCount]   = useState(0);
   const winnerSetRef = useRef(false);
+
+  // Arena state
+  const [arenaRunning,  setArenaRunning]  = useState(false);
+  const [arenaResult,   setArenaResult]   = useState<ArenaRoundResult | null>(null);
+  const [arenaError,    setArenaError]    = useState<string | null>(null);
 
   const updateCard = useCallback((modelId: string, patch: Partial<CardState>) => {
     setCards(prev => ({ ...prev, [modelId]: { ...prev[modelId], ...patch } }));
@@ -694,6 +721,32 @@ export default function BenchmarkPage() {
       setCards(Object.fromEntries(BENCHMARK_AGENTS.map(a => [a.modelId, makeIdleCard()])));
     }
   }, [isStarting, difficulty, updateCard]);
+
+  // ── Arena round trigger ────────────────────────────────────────────────────
+  const runArenaRound = useCallback(async () => {
+    if (arenaRunning) return;
+    setArenaRunning(true);
+    setArenaResult(null);
+    setArenaError(null);
+
+    try {
+      const res = await fetch('/api/arena/round', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ skipWarmup: false }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      const result: ArenaRoundResult = await res.json();
+      setArenaResult(result);
+    } catch (err: any) {
+      setArenaError(err?.message ?? 'Unknown error');
+    } finally {
+      setArenaRunning(false);
+    }
+  }, [arenaRunning]);
 
   const allDone = run && Object.values(cards).every(
     c => c.status !== 'loading',
@@ -818,6 +871,37 @@ export default function BenchmarkPage() {
               </>
             ) : (
               <>⚡ New Benchmark</>
+            )}
+          </button>
+
+          {/* Arena round button */}
+          <button
+            onClick={runArenaRound}
+            disabled={arenaRunning}
+            style={{
+              padding:      '8px 18px',
+              borderRadius: '8px',
+              border:       'none',
+              cursor:       arenaRunning ? 'not-allowed' : 'pointer',
+              fontWeight:   700,
+              fontSize:     '13px',
+              background:   arenaRunning
+                ? 'rgba(251,191,36,0.2)'
+                : 'linear-gradient(135deg,#f59e0b,#ef4444)',
+              color:        arenaRunning ? '#f59e0b' : 'white',
+              transition:   'all 0.2s',
+              display:      'flex',
+              alignItems:   'center',
+              gap:          '6px',
+            }}
+          >
+            {arenaRunning ? (
+              <>
+                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span>
+                Arena running…
+              </>
+            ) : (
+              <>🏟 Arena Round</>
             )}
           </button>
         </div>
@@ -1055,6 +1139,161 @@ export default function BenchmarkPage() {
           <span>KEY MISSING = env var not set</span>
           <span>⚡ = response latency</span>
         </div>
+
+        {/* ── Arena Round Result ── */}
+        {(arenaRunning || arenaResult || arenaError) && (
+          <div style={{
+            marginTop:    '40px',
+            paddingTop:   '32px',
+            borderTop:    '1px solid rgba(255,255,255,0.06)',
+            animation:    'fadeIn 0.5s ease',
+          }}>
+            <div style={{
+              fontWeight:     700,
+              fontSize:       '15px',
+              letterSpacing:  '-0.02em',
+              background:     'linear-gradient(135deg,#f59e0b,#ef4444)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              marginBottom:  '16px',
+            }}>
+              🏟 Arena Round {arenaResult ? `— "${arenaResult.idiomPhrase}"` : ''}
+            </div>
+
+            {arenaRunning && (
+              <div style={{ fontSize: '13px', color: '#6b7280', fontFamily: 'monospace' }}>
+                <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite', marginRight: '8px' }}>⟳</span>
+                Running arena round (warmup → 3 waves × 12 models)… this takes 1-3 minutes.
+              </div>
+            )}
+
+            {arenaError && (
+              <div style={{
+                padding:      '16px',
+                background:   'rgba(239,68,68,0.1)',
+                border:       '1px solid rgba(239,68,68,0.3)',
+                borderRadius: '12px',
+                color:        '#f87171',
+                fontSize:     '13px',
+              }}>
+                Arena error: {arenaError}
+              </div>
+            )}
+
+            {arenaResult && (
+              <div>
+                {/* Summary */}
+                <div style={{
+                  display:     'flex',
+                  gap:         '16px',
+                  flexWrap:    'wrap',
+                  marginBottom: '16px',
+                }}>
+                  <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace' }}>
+                    Round: {arenaResult.roundId.slice(0, 8)}…
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace' }}>
+                    Duration: {(arenaResult.durationMs / 1000).toFixed(1)}s
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', fontFamily: 'monospace' }}>
+                    Models: {arenaResult.models.length}
+                  </div>
+                  {arenaResult.winner && (
+                    <div style={{ fontSize: '12px', color: '#fbbf24', fontFamily: 'monospace', fontWeight: 700 }}>
+                      Winner: {arenaResult.winner.label} (+{arenaResult.winner.score}pts at {arenaResult.winner.tMs}ms)
+                    </div>
+                  )}
+                </div>
+
+                {/* Image */}
+                {arenaResult.imageUrl && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <img
+                      src={arenaResult.imageUrl}
+                      alt={`Arena round: ${arenaResult.idiomPhrase}`}
+                      style={{
+                        width:        '200px',
+                        height:       '150px',
+                        objectFit:    'cover',
+                        borderRadius: '12px',
+                        border:       '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    />
+                  </div>
+                )}
+
+                {/* Scoreboard table */}
+                <div style={{
+                  background:   'rgba(255,255,255,0.02)',
+                  border:       '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '12px',
+                  overflow:     'hidden',
+                }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>#</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Model</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Score</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Att.</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Best Guess</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Time</th>
+                        <th style={{ padding: '8px 12px', fontSize: '10px', color: '#4b5563', fontFamily: 'monospace', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>Warmup</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {arenaResult.models.map((m, i) => {
+                        const correctGuess = m.guesses.find(g => g.isCorrect);
+                        const firstGuess = m.guesses.find(g => g.action === 'guess');
+                        const tMs = correctGuess?.tMsFromStart ?? firstGuess?.tMsFromStart ?? null;
+                        return (
+                          <tr key={m.modelId} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                            <td style={{ padding: '7px 12px', fontSize: '12px', color: i < 3 ? ['#fbbf24','#9ca3af','#b45309'][i] : '#4b5563', fontWeight: 700, borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              {i + 1}
+                            </td>
+                            <td style={{ padding: '7px 12px', fontSize: '12px', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              <span style={{ marginRight: '6px' }}>{m.icon}</span>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '11px' }}>{m.label}</span>
+                            </td>
+                            <td style={{
+                              padding: '7px 12px', fontSize: '13px', fontWeight: 700, fontFamily: 'monospace', textAlign: 'right',
+                              color: m.finalScore > 0 ? '#10b981' : m.finalScore < 0 ? '#ef4444' : '#6b7280',
+                              borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            }}>
+                              {m.finalScore > 0 ? '+' : ''}{m.finalScore}
+                            </td>
+                            <td style={{ padding: '7px 12px', fontSize: '11px', color: '#6b7280', textAlign: 'center', fontFamily: 'monospace', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              {m.attemptsUsed}/{3}
+                            </td>
+                            <td style={{
+                              padding: '7px 12px', fontSize: '11px', fontStyle: m.bestGuess ? 'italic' : 'normal',
+                              color: m.isCorrect ? '#10b981' : m.bestGuess ? '#d1d5db' : '#4b5563',
+                              borderBottom: '1px solid rgba(255,255,255,0.04)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              {m.bestGuess ?? (m.guesses[0]?.error ? `Error: ${m.guesses[0].error.slice(0, 30)}` : '(no guess)')}
+                              {m.isCorrect && ' ✓'}
+                            </td>
+                            <td style={{ padding: '7px 12px', fontSize: '11px', color: '#6b7280', fontFamily: 'monospace', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                              {tMs != null ? `${(tMs / 1000).toFixed(1)}s` : '—'}
+                            </td>
+                            <td style={{
+                              padding: '7px 12px', fontSize: '11px', fontFamily: 'monospace', textAlign: 'right',
+                              color: m.warmupOk ? '#10b981' : '#ef4444',
+                              borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            }}>
+                              {m.warmupLatencyMs != null ? `${(m.warmupLatencyMs / 1000).toFixed(1)}s` : '—'}
+                              {m.warmupOk ? '' : ' ✕'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Global Stats ── refreshKey increments after each run so stats reload */}
         <GlobalStats refreshKey={runCount} />
