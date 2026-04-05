@@ -1,17 +1,19 @@
 /**
- * Multi-Provider Vision Dispatcher
+ * Multi-Provider Vision Dispatcher — hotfix 2026-04-05
  *
- * Sends an image to a vision-capable AI model and asks it to identify
- * the English idiom depicted. Each provider uses its own SDK.
- *
- * Supported providers:
- *   openai    – GPT-4o, GPT-4o Mini           (openai SDK)
- *   anthropic – Claude 3.5 Sonnet, Haiku      (@anthropic-ai/sdk)
- *   groq      – Llama 3.2 Vision              (groq-sdk)
- *   google    – Gemini 1.5 Pro/Flash          (@google/generative-ai)
- *   replicate – LLaVA 13B                     (REST API)
- *   mistral   – Pixtral 12B                   (REST API — OpenAI-compat)
- *   mock      – Always returns a random guess  (no key needed, for UI testing)
+ * Key changes from initial version:
+ *   • Anthropic: updated to Claude 4.x model IDs (3.x fully deprecated);
+ *     switched from URL image source to base64 (Anthropic servers time out
+ *     fetching fal.ai URLs)
+ *   • Groq: updated to meta-llama/llama-4-scout-17b-16e-instruct
+ *     (llama-3.2-11b-vision-preview decommissioned); switched to base64
+ *     data-URL (Groq servers also time out on fal.ai URLs)
+ *   • Gemini: updated to gemini-2.5-pro + gemini-2.5-flash
+ *     (gemini-2.0-flash / -latest aliases no longer available to new users);
+ *     switched to fileData.fileUri (no-download URL path — faster, works
+ *     reliably from Google's infrastructure to fal.ai CDN)
+ *   • CALL_TIMEOUT_MS raised to 55s (base64 download + inference can exceed 30s)
+ *   • Shared downloadImageBase64() helper avoids duplicate fetches
  */
 
 import OpenAI from 'openai';
@@ -32,6 +34,7 @@ export interface AgentConfig {
 }
 
 export const BENCHMARK_AGENTS: AgentConfig[] = [
+  // ── OpenAI ──────────────────────────────────────────────────────────────
   {
     modelId:       'gpt-4o',
     provider:      'openai',
@@ -50,51 +53,55 @@ export const BENCHMARK_AGENTS: AgentConfig[] = [
     accentColor:   '#34d399',
     icon:          '🟩',
   },
+  // ── Anthropic (Claude 4.x — confirmed available 2026-04-05) ─────────────
   {
-    modelId:       'claude-3-5-sonnet-20241022',
+    modelId:       'claude-sonnet-4-5-20250929',
     provider:      'anthropic',
-    label:         'Claude 3.5 Sonnet',
+    label:         'Claude 4.5 Sonnet',
     providerLabel: 'Anthropic',
     envKey:        'ANTHROPIC_API_KEY',
     accentColor:   '#f97316',
     icon:          '🟠',
   },
   {
-    modelId:       'claude-3-haiku-20240307',
+    modelId:       'claude-haiku-4-5-20251001',
     provider:      'anthropic',
-    label:         'Claude 3 Haiku',
+    label:         'Claude 4.5 Haiku',
     providerLabel: 'Anthropic',
     envKey:        'ANTHROPIC_API_KEY',
     accentColor:   '#fbbf24',
     icon:          '🟡',
   },
+  // ── Google (Gemini 2.5 — confirmed available 2026-04-05) ─────────────────
   {
-    modelId:       'gemini-1.5-pro-latest',
+    modelId:       'gemini-2.5-pro',
     provider:      'google',
-    label:         'Gemini 1.5 Pro',
+    label:         'Gemini 2.5 Pro',
     providerLabel: 'Google',
     envKey:        'GOOGLE_GENERATIVE_AI_API_KEY',
     accentColor:   '#4285f4',
     icon:          '🔵',
   },
   {
-    modelId:       'gemini-1.5-flash-latest',
+    modelId:       'gemini-2.5-flash',
     provider:      'google',
-    label:         'Gemini 1.5 Flash',
+    label:         'Gemini 2.5 Flash',
     providerLabel: 'Google',
     envKey:        'GOOGLE_GENERATIVE_AI_API_KEY',
     accentColor:   '#60a5fa',
     icon:          '💙',
   },
+  // ── Groq (Llama 4 Scout — confirmed available + vision-capable 2026-04-05) ─
   {
-    modelId:       'llama-3.2-11b-vision-preview',
+    modelId:       'meta-llama/llama-4-scout-17b-16e-instruct',
     provider:      'groq',
-    label:         'Llama 3.2 Vision',
+    label:         'Llama 4 Scout',
     providerLabel: 'Groq',
     envKey:        'GROQ_API_KEY',
     accentColor:   '#f59e0b',
     icon:          '⚡',
   },
+  // ── Placeholder / Experimental ───────────────────────────────────────────
   {
     modelId:       'replicate-llava',
     provider:      'replicate',
@@ -144,155 +151,150 @@ Your task is to identify which idiom the image illustrates.
 Respond ONLY with valid JSON (no markdown, no code blocks):
 {"guess": "the idiom phrase", "strategy": "brief explanation of your visual reasoning (max 20 words)"}`;
 
+// ── Image download helper ─────────────────────────────────────────────────────
+// Used by providers whose servers cannot directly fetch fal.ai CDN URLs.
+// Downloads the image via Vercel's outbound connection (which CAN reach fal.ai)
+// and converts to base64 for inline embedding.
+
+async function downloadImageBase64(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
+  const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`Image download failed: HTTP ${res.status}`);
+  const mimeType = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim();
+  const base64   = Buffer.from(await res.arrayBuffer()).toString('base64');
+  return { base64, mimeType };
+}
+
 // ── JSON extraction helper ────────────────────────────────────────────────────
 
 function parseGuessResponse(raw: string): { guess: string; strategy: string } {
-  // Try direct JSON parse
+  // Direct JSON
   try {
     const j = JSON.parse(raw.trim());
     if (j.guess) return { guess: String(j.guess), strategy: String(j.strategy || '') };
   } catch { /* fall through */ }
 
-  // Extract JSON block from markdown fences
-  const fenceMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-  if (fenceMatch) {
+  // Markdown fence
+  const fence = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (fence) {
     try {
-      const j = JSON.parse(fenceMatch[1]);
+      const j = JSON.parse(fence[1]);
       if (j.guess) return { guess: String(j.guess), strategy: String(j.strategy || '') };
     } catch { /* fall through */ }
   }
 
-  // Find first JSON object in text
-  const jsonMatch = raw.match(/\{[^{}]*"guess"[^{}]*\}/);
-  if (jsonMatch) {
+  // First JSON object containing "guess"
+  const objMatch = raw.match(/\{[^{}]*"guess"[^{}]*\}/);
+  if (objMatch) {
     try {
-      const j = JSON.parse(jsonMatch[0]);
+      const j = JSON.parse(objMatch[0]);
       if (j.guess) return { guess: String(j.guess), strategy: String(j.strategy || '') };
     } catch { /* fall through */ }
   }
 
-  // Regex fallback for guess field
-  const guessMatch = raw.match(/"guess"\s*:\s*"([^"]+)"/);
-  const stratMatch = raw.match(/"strategy"\s*:\s*"([^"]+)"/);
-  if (guessMatch) {
-    return {
-      guess:    guessMatch[1],
-      strategy: stratMatch?.[1] ?? '',
-    };
-  }
+  // Regex field extraction
+  const gm = raw.match(/"guess"\s*:\s*"([^"]+)"/);
+  const sm = raw.match(/"strategy"\s*:\s*"([^"]+)"/);
+  if (gm) return { guess: gm[1], strategy: sm?.[1] ?? '' };
 
-  // Last resort: treat the whole response as the guess
   return { guess: raw.slice(0, 80).trim(), strategy: '' };
 }
 
-// ── Per-provider dispatch functions ──────────────────────────────────────────
+// ── Provider implementations ──────────────────────────────────────────────────
 
 async function probeOpenAI(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const response = await client.chat.completions.create({
+  const resp = await client.chat.completions.create({
     model:  modelId,
-    messages: [{
-      role:    'user',
-      content: [
-        { type: 'text',      text:      SYSTEM_PROMPT },
-        { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
-      ],
-    }],
+    messages: [{ role: 'user', content: [
+      { type: 'text',      text:      SYSTEM_PROMPT },
+      { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+    ]}],
     max_tokens:      256,
     response_format: { type: 'json_object' },
   });
-  return parseGuessResponse(response.choices[0]?.message?.content ?? '{}');
+  return parseGuessResponse(resp.choices[0]?.message?.content ?? '{}');
 }
 
 async function probeAnthropic(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
+  // Anthropic servers time out downloading fal.ai CDN URLs.
+  // Pre-download the image and pass as base64 instead.
+  const { base64, mimeType } = await downloadImageBase64(imageUrl);
+  const validMime = (['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const).includes(
+    mimeType as any,
+  ) ? (mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp') : 'image/jpeg';
+
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const response = await client.messages.create({
+  const resp = await client.messages.create({
     model:      modelId,
     max_tokens: 256,
-    messages:   [{
-      role:    'user',
-      content: [
-        { type: 'image', source: { type: 'url', url: imageUrl } },
-        { type: 'text',  text: SYSTEM_PROMPT },
-      ],
-    }],
+    messages:   [{ role: 'user', content: [
+      { type: 'image', source: { type: 'base64', media_type: validMime, data: base64 } },
+      { type: 'text',  text: SYSTEM_PROMPT },
+    ]}],
   });
-  const text = response.content.find(b => b.type === 'text')?.text ?? '{}';
+  const text = resp.content.find(b => b.type === 'text')?.text ?? '{}';
   return parseGuessResponse(text);
 }
 
 async function probeGroq(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
+  // Groq servers time out downloading fal.ai CDN URLs.
+  // Pre-download and embed as a base64 data-URL instead.
+  const { base64, mimeType } = await downloadImageBase64(imageUrl);
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+
   const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  const response = await client.chat.completions.create({
+  const resp = await client.chat.completions.create({
     model:      modelId,
     max_tokens: 256,
-    messages:   [{
-      role:    'user',
-      content: [
-        { type: 'image_url', image_url: { url: imageUrl } },
-        { type: 'text',      text: SYSTEM_PROMPT },
-      ] as any,
-    }],
+    messages:   [{ role: 'user', content: [
+      { type: 'image_url', image_url: { url: dataUrl } } as any,
+      { type: 'text',      text: SYSTEM_PROMPT } as any,
+    ]}],
   });
-  return parseGuessResponse(response.choices[0]?.message?.content ?? '{}');
+  return parseGuessResponse(resp.choices[0]?.message?.content ?? '{}');
 }
 
 async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
+  // Use fileData.fileUri — Google's infra can fetch fal.ai CDN URLs directly,
+  // avoiding the base64 round-trip entirely. Confirmed working with Gemini 2.5.
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
   const model = genAI.getGenerativeModel({ model: modelId });
 
-  // Gemini requires inline base64 for external image URLs
-  const imageRes  = await fetch(imageUrl, { signal: AbortSignal.timeout(10_000) });
-  const mimeType  = (imageRes.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim();
-  const imageData = Buffer.from(await imageRes.arrayBuffer()).toString('base64');
-
   const result = await model.generateContent({
-    contents: [{
-      role:  'user',
-      parts: [
-        { text: SYSTEM_PROMPT },
-        { inlineData: { mimeType, data: imageData } },
-      ],
-    }],
-    generationConfig: { maxOutputTokens: 256 },
+    contents: [{ role: 'user', parts: [
+      { text: SYSTEM_PROMPT },
+      { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } },
+    ]}],
+    generationConfig: { maxOutputTokens: 256, responseMimeType: 'application/json' },
   });
   return parseGuessResponse(result.response.text());
 }
 
 async function probeReplicate(imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  const token = process.env.REPLICATE_API_TOKEN;
-  // LLaVA 13B — stable model version hash
-  const VERSION = 'a305f1a671c330654f9b058dbe22e08ba2fb7a56ef5cbf394fedb8e9c28f7427';
+  const token   = process.env.REPLICATE_API_TOKEN;
+  const VERSION = 'a305f1a671c330654f9b058dbe22e08ba2fb7a56ef5cbf394fedb8e9c28f7427'; // LLaVA 13B
 
-  // Submit prediction
   const submitRes = await fetch('https://api.replicate.com/v1/predictions', {
-    method:  'POST',
-    headers: {
-      'Authorization': `Token ${token}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
-      version: VERSION,
-      input:   { image: imageUrl, prompt: SYSTEM_PROMPT, max_new_tokens: 256 },
-    }),
-    signal: AbortSignal.timeout(10_000),
+    method: 'POST',
+    headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ version: VERSION, input: { image: imageUrl, prompt: SYSTEM_PROMPT, max_new_tokens: 256 } }),
+    signal:  AbortSignal.timeout(10_000),
   });
   if (!submitRes.ok) throw new Error(`Replicate submit ${submitRes.status}`);
   const { id: predId, urls } = await submitRes.json();
+  const pollUrl = urls?.get ?? `https://api.replicate.com/v1/predictions/${predId}`;
 
-  // Poll for result (max 25s)
-  const pollUrl  = urls?.get ?? `https://api.replicate.com/v1/predictions/${predId}`;
   const deadline = Date.now() + 25_000;
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 2000));
-    const pollRes = await fetch(pollUrl, {
+    const poll = await fetch(pollUrl, {
       headers: { 'Authorization': `Token ${token}` },
       signal:  AbortSignal.timeout(5_000),
     });
-    const pred = await pollRes.json();
+    const pred = await poll.json();
     if (pred.status === 'succeeded') {
-      const output = Array.isArray(pred.output) ? pred.output.join('') : String(pred.output ?? '');
-      return parseGuessResponse(output);
+      const out = Array.isArray(pred.output) ? pred.output.join('') : String(pred.output ?? '');
+      return parseGuessResponse(out);
     }
     if (pred.status === 'failed') throw new Error('Replicate prediction failed');
   }
@@ -302,20 +304,14 @@ async function probeReplicate(imageUrl: string): Promise<{ guess: string; strate
 async function probeMistral(imageUrl: string): Promise<{ guess: string; strategy: string }> {
   const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
     method:  'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
+    headers: { 'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
       model:      'pixtral-12b-2409',
       max_tokens: 256,
-      messages:   [{
-        role:    'user',
-        content: [
-          { type: 'text',      text:      SYSTEM_PROMPT },
-          { type: 'image_url', image_url: { url: imageUrl } },
-        ],
-      }],
+      messages:   [{ role: 'user', content: [
+        { type: 'text',      text:      SYSTEM_PROMPT },
+        { type: 'image_url', image_url: { url: imageUrl } },
+      ]}],
     }),
     signal: AbortSignal.timeout(25_000),
   });
@@ -336,8 +332,10 @@ function probeMock(): { guess: string; strategy: string } {
 }
 
 // ── Main dispatcher ───────────────────────────────────────────────────────────
+// 55s per-call budget: up to 15s image download + up to 40s for inference
+// (probe route maxDuration = 60s)
 
-const CALL_TIMEOUT_MS = 30_000;
+const CALL_TIMEOUT_MS = 55_000;
 
 export async function dispatchProbe(modelId: string, imageUrl: string): Promise<ProbeResult> {
   const agent = BENCHMARK_AGENTS.find(a => a.modelId === modelId);
@@ -345,7 +343,6 @@ export async function dispatchProbe(modelId: string, imageUrl: string): Promise<
     return { modelId, guess: '', strategy: '', latencyMs: 0, isKeyMissing: false, error: `Unknown modelId: ${modelId}` };
   }
 
-  // Check key
   const isKeyMissing = agent.envKey !== null && !process.env[agent.envKey];
   if (isKeyMissing && agent.provider !== 'mock') {
     return { modelId, guess: '', strategy: '', latencyMs: 0, isKeyMissing: true };
@@ -362,7 +359,6 @@ export async function dispatchProbe(modelId: string, imageUrl: string): Promise<
 
   try {
     let result: { guess: string; strategy: string };
-
     switch (agent.provider) {
       case 'openai':    result = await withTimeout(probeOpenAI(modelId, imageUrl));    break;
       case 'anthropic': result = await withTimeout(probeAnthropic(modelId, imageUrl)); break;
@@ -372,20 +368,12 @@ export async function dispatchProbe(modelId: string, imageUrl: string): Promise<
       case 'mistral':   result = await withTimeout(probeMistral(imageUrl));            break;
       case 'mock':
       default:
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 1400)); // fake latency
+        await new Promise(r => setTimeout(r, 600 + Math.random() * 1400));
         result = probeMock();
         break;
     }
-
     return { modelId, ...result, latencyMs: Date.now() - t0, isKeyMissing: false };
   } catch (err: any) {
-    return {
-      modelId,
-      guess:        '',
-      strategy:     '',
-      latencyMs:    Date.now() - t0,
-      isKeyMissing: false,
-      error:        err?.message ?? 'Unknown error',
-    };
+    return { modelId, guess: '', strategy: '', latencyMs: Date.now() - t0, isKeyMissing: false, error: err?.message ?? 'Unknown error' };
   }
 }
