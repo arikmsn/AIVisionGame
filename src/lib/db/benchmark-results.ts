@@ -16,9 +16,10 @@
  *     error         text
  *   )
  *
- * insertBenchmarkResult() is intended to be called fire-and-forget from the
- * probe route so it never blocks the HTTP response. It silently no-ops when
- * Supabase is not configured.
+ * insertBenchmarkResult() is awaited in the probe route — Vercel serverless
+ * functions terminate as soon as the response is sent, so fire-and-forget
+ * is unreliable.  The 3 s timeout keeps the write well within maxDuration=60.
+ * Silently no-ops when Supabase is not configured.
  *
  * fetchAllBenchmarkResults() is used by /api/benchmark/stats to pull the
  * full dataset for in-process aggregation. Capped at 5000 rows (newest first)
@@ -93,7 +94,7 @@ export async function insertBenchmarkResult(row: BenchmarkResultRow): Promise<bo
         image_url:    row.imageUrl,
         error:        row.error ?? null,
       }),
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(3_000), // 3 s fits within maxDuration=60 even after a 55 s inference
     });
 
     return res.ok;

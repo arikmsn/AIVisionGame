@@ -70,10 +70,12 @@ export async function POST(request: NextRequest) {
       (result.isKeyMissing ? ' | KEY_MISSING' : ''),
     );
 
-    // Persist result to Supabase — fire-and-forget, never block the HTTP response.
-    // Errors and key-missing cases are logged too so we can track provider reliability.
+    // Persist result to Supabase — awaited so the write completes before Vercel
+    // terminates the serverless function.  Fire-and-forget is NOT safe on Vercel:
+    // the runtime exits as soon as NextResponse.json() is returned, killing any
+    // in-flight fetch promises.  The DB timeout (3 s) fits well within maxDuration.
     if (phrase) {
-      insertBenchmarkResult({
+      await insertBenchmarkResult({
         idiomPhrase: phrase,
         modelId:     result.modelId,
         guess:       result.guess     ?? '',
@@ -84,7 +86,10 @@ export async function POST(request: NextRequest) {
         error:       result.isKeyMissing
           ? 'key_missing'
           : (result.error ?? undefined),
-      }).catch(() => {}); // swallow — never let logging block the benchmark
+      }).catch((dbErr) => {
+        // Log but never surface DB errors to the caller — benchmark must keep running
+        console.error('[BENCHMARK/PROBE] DB insert failed:', dbErr?.message ?? dbErr);
+      });
     }
 
     return NextResponse.json({ ...result, isCorrect });
