@@ -8,10 +8,12 @@
  *   • Groq: updated to meta-llama/llama-4-scout-17b-16e-instruct
  *     (llama-3.2-11b-vision-preview decommissioned); switched to base64
  *     data-URL (Groq servers also time out on fal.ai URLs)
- *   • Gemini: updated to gemini-2.5-pro + gemini-2.5-flash
- *     (gemini-2.0-flash / -latest aliases no longer available to new users);
- *     switched to fileData.fileUri (no-download URL path — faster, works
- *     reliably from Google's infrastructure to fal.ai CDN)
+ *   • Gemini: updated to gemini-2.5-pro + gemini-2.5-flash;
+ *     both now use inlineData (base64) — fileData.fileUri only works for
+ *     URLs that Google's CDN can reach directly (fal.ai is unreliable);
+ *     Pro uses maxOutputTokens:16384 because thinking tokens count against
+ *     the output budget (1024 was entirely consumed by thinking)
+ *   • downloadImageBase64 timeout raised 15s → 25s for slow CDN responses
  *   • CALL_TIMEOUT_MS raised to 55s (base64 download + inference can exceed 30s)
  *   • Shared downloadImageBase64() helper avoids duplicate fetches
  */
@@ -157,7 +159,7 @@ Respond ONLY with valid JSON (no markdown, no code blocks):
 // and converts to base64 for inline embedding.
 
 async function downloadImageBase64(imageUrl: string): Promise<{ base64: string; mimeType: string }> {
-  const res = await fetch(imageUrl, { signal: AbortSignal.timeout(15_000) });
+  const res = await fetch(imageUrl, { signal: AbortSignal.timeout(25_000) });
   if (!res.ok) throw new Error(`Image download failed: HTTP ${res.status}`);
   const mimeType = (res.headers.get('content-type') ?? 'image/jpeg').split(';')[0].trim();
   const base64   = Buffer.from(await res.arrayBuffer()).toString('base64');
@@ -255,22 +257,20 @@ async function probeGroq(modelId: string, imageUrl: string): Promise<{ guess: st
 }
 
 async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  // Image strategy per model:
-  //   Gemini 2.5 Pro  — with thinkingBudget:0, Pro cannot fetch fileData URLs
-  //     from fal.ai CDN. Pre-download as base64 inlineData (same as Anthropic/Groq).
-  //   Gemini 2.5 Flash — fileData.fileUri works reliably; skip download for speed.
-  // thinkingBudget:0 disables extended thinking for both models; without it, Pro
-  //   returns thinking-only output (text() = "") and Flash returns malformed JSON.
-  const isPro = /pro/i.test(modelId);
-
+  // Both Pro and Flash use inlineData (base64) to avoid fileData URL-fetch failures.
+  // fileData.fileUri only works for URLs that Google's CDN can reach directly; fal.ai
+  // and other third-party hosts are unreliable. Pre-downloading on Vercel is safer.
+  //
+  // Gemini 2.5 Pro uses extended thinking by default — maxOutputTokens INCLUDES thinking
+  // tokens (per Google docs), so 1024 is entirely consumed by thinking, leaving 0 for
+  // the actual response. Use 16384 to give the model room to think AND respond.
+  // Flash is a non-thinking model so it just benefits from extra headroom.
+  const { base64, mimeType } = await downloadImageBase64(imageUrl);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let imagePart: any;
-  if (isPro) {
-    const { base64, mimeType } = await downloadImageBase64(imageUrl);
-    imagePart = { inlineData: { mimeType, data: base64 } };
-  } else {
-    imagePart = { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
-  }
+  const imagePart: any = { inlineData: { mimeType, data: base64 } };
+
+  const isPro = /pro/i.test(modelId);
+  const maxOutputTokens = isPro ? 16384 : 1024;
 
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
   const model = genAI.getGenerativeModel({ model: modelId });
@@ -280,7 +280,7 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
       { text: SYSTEM_PROMPT },
       imagePart,
     ]}],
-    generationConfig: { maxOutputTokens: 1024 },
+    generationConfig: { maxOutputTokens },
   });
 
   // Try text() first; if empty, walk parts[] for a non-thinking text part
