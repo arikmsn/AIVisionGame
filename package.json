@@ -9,12 +9,15 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.82.0",
     "@fal-ai/serverless-client": "^0.15.0",
+    "@google/generative-ai": "^0.24.1",
     "canvas-confetti": "^1.9.4",
     "fal": "^0.1.1",
     "framer-motion": "^12.38.0",
     "groq-sdk": "^1.1.2",
     "next": "16.2.1",
+    "openai": "^6.33.0",
     "pusher": "^5.3.3",
     "pusher-js": "^8.4.3",
     "react": "19.2.4",
