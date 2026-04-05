@@ -4,6 +4,7 @@ import Pusher from 'pusher';
 import { updateGameState, updateScore, addGuess, getGameState } from '@/lib/gameStore';
 import { IDIOMS, findIdiomByHe } from '@/lib/idioms-data';
 import { extractBearerToken, resolveAgentKey } from '@/lib/agents/api-keys';
+import { upsertActiveRound } from '@/lib/db/rounds';
 
 const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 
@@ -333,8 +334,9 @@ async function broadcastVictory({
     }
   }
 
-  // 3. Set phase to 'winner' in store
+  // 3. Set phase to 'winner' in store + persist cross-instance so sync sees it
   updateGameState(roomId, { phase: 'winner', winner });
+  upsertActiveRound({ roomId, roundId: '', phase: 'winner', imageUrl: null, roundStartTime: null }).catch(() => {});
 
   // 4. Kick off image generation NOW (during the 5-second victory window) so the
   //    next image is ready — or close to ready — when the countdown hits 0.

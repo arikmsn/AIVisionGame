@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import Pusher from 'pusher';
 import { updateGameState, addGuess, getFullGameState } from '@/lib/gameStore';
 import { extractBearerToken, resolveAgentKey } from '@/lib/agents/api-keys';
+import { fetchActiveRound } from '@/lib/db/rounds';
+import type { GamePhase } from '@/context/GameContext';
 
 const ROUND_TTL_MS = 60_000;
 
@@ -17,29 +19,58 @@ const ROUND_TTL_MS = 60_000;
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const roomId = searchParams.get('roomId');
+  const rawRoomId = searchParams.get('roomId');
 
-  if (!roomId) {
+  if (!rawRoomId) {
     return NextResponse.json({ error: 'roomId required' }, { status: 400 });
   }
+
+  // Normalize: trim + uppercase so external agents using lowercase room IDs
+  // hit the same gameStore key as the frontend (which always uppercases).
+  const roomId = rawRoomId.trim().toUpperCase();
 
   // Optional agent auth — resolves identity but does not gate access
   const token    = extractBearerToken(request.headers.get('Authorization'));
   const identity = token ? resolveAgentKey(token) : null;
 
-  const state = getFullGameState(roomId);
-  const timeLeft = state.roundStartTime && state.phase === 'drawing'
-    ? Math.max(0, ROUND_TTL_MS - (Date.now() - state.roundStartTime))
+  const localState = getFullGameState(roomId);
+
+  // ── Cross-instance fallback ──────────────────────────────────────────────
+  // On Vercel, each serverless invocation may run in a separate process with
+  // an empty in-memory gameStore (cold instance). When local state is idle
+  // we fall back to the shared active_rounds row persisted by start-round.
+  let phase: GamePhase = localState.phase;
+  let imageUrl         = localState.imageUrl;
+  let roundId          = localState.roundId;
+  let roundStartTime   = localState.roundStartTime;
+  let guesses          = localState.guesses;
+
+  if (phase === 'idle') {
+    const persisted = await fetchActiveRound(roomId);
+    if (persisted && persisted.phase !== 'idle') {
+      console.log(`[SYNC] 🔄 Cross-instance fallback for room "${roomId}": persisted phase="${persisted.phase}"`);
+      // Cast is safe: persisted.phase comes from the same codebase that writes it
+      phase          = persisted.phase as GamePhase;
+      imageUrl       = persisted.imageUrl;
+      roundId        = persisted.roundId;
+      roundStartTime = persisted.roundStartTime;
+      // guesses not persisted cross-instance — return empty (agents only need image + roundId)
+      guesses        = [];
+    }
+  }
+
+  const timeLeft = roundStartTime && phase === 'drawing'
+    ? Math.max(0, ROUND_TTL_MS - (Date.now() - roundStartTime))
     : 0;
 
   return NextResponse.json({
     roomId,
-    phase:        state.phase,
-    imageUrl:     state.imageUrl,
-    roundId:      state.roundId,
-    roundStartTime: state.roundStartTime,
+    phase,
+    imageUrl,
+    roundId,
+    roundStartTime,
     timeLeft,
-    guessHistory: state.guesses.map(g => ({ player: g.playerName, text: g.text, timestamp: g.timestamp })),
+    guessHistory: guesses.map(g => ({ player: g.playerName, text: g.text, timestamp: g.timestamp })),
     ...(identity ? { agentName: identity.agentName, agentId: identity.agentId } : {}),
   });
 }
@@ -55,7 +86,8 @@ const pusher = new Pusher({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { roomId, action, data } = body;
+    const { action, data } = body;
+    const roomId: string = body.roomId ? String(body.roomId).trim().toUpperCase() : '';
 
     if (!roomId || !action) {
       return NextResponse.json(

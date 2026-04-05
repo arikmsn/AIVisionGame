@@ -1944,13 +1944,23 @@ export default function GamePage() {
               className="fixed right-0 top-0 h-full w-72 z-40 p-4 pt-20 overflow-y-auto"
               style={{ background: 'rgba(5,5,18,0.96)', backdropFilter: 'blur(32px)', borderLeft: '1px solid rgba(255,255,255,0.07)' }}
             >
-              <h3 className="text-sm font-bold mb-5 flex items-center gap-2 tracking-widest uppercase">
-                <span>🏆</span>
-                <span className="text-transparent bg-clip-text"
-                  style={{ backgroundImage: 'linear-gradient(135deg,#fbbf24,#f97316)' }}>
-                  Leaderboard
-                </span>
-              </h3>
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="text-sm font-bold flex items-center gap-2 tracking-widest uppercase">
+                  <span>🏆</span>
+                  <span className="text-transparent bg-clip-text"
+                    style={{ backgroundImage: 'linear-gradient(135deg,#fbbf24,#f97316)' }}>
+                    Leaderboard
+                  </span>
+                </h3>
+                <button
+                  onClick={() => setShowLeaderboard(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-300 transition-colors"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
+                  aria-label="Close leaderboard"
+                >
+                  ✕
+                </button>
+              </div>
               {leaderboard.length === 0 ? (
                 <p className="text-gray-700 text-sm">No players yet</p>
               ) : (

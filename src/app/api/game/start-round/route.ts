@@ -3,6 +3,7 @@ import Pusher from 'pusher';
 import { updateGameState, getGameState, pickNextIdiomIndex, getFullGameState } from '@/lib/gameStore';
 import { IDIOMS } from '@/lib/idioms-data';
 import { runOrchestratorAsync } from '@/lib/agents/orchestrator';
+import { upsertActiveRound } from '@/lib/db/rounds';
 
 // Vercel Hobby tier defaults to 10s. start-round calls Fal.ai (up to 30s) so
 // we need a higher ceiling. 60s is the maximum on Hobby; Pro allows 300s.
@@ -79,7 +80,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     // Fall back to 'lobby' so a missing roomId never hard-errors — the room
     // will be created on first access rather than returning a 400.
-    roomId = body.roomId || 'lobby';
+    // Normalize roomId: consistent uppercase + trim so all instances key on
+    // the same string regardless of how the caller formatted the value.
+    roomId = (body.roomId || 'lobby').trim().toUpperCase();
     // When > 0, the game-started broadcast is held until max(0, delayBroadcastMs - generationTime) ms
     // after image generation completes, ensuring clients don't exit the winner overlay early.
     const delayBroadcastMs: number = body.delayBroadcastMs ?? 0;
@@ -161,6 +164,11 @@ export async function POST(request: NextRequest) {
       guesses: [],
     });
 
+    // Cross-instance persistence: write to Supabase so cold Vercel instances
+    // can serve /api/game/sync even if they didn't handle this start-round call.
+    // Fire-and-forget — never blocks the broadcast path.
+    upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: null }).catch(() => {});
+
     // ── Kick off bot orchestration via after() ───────────────────────────────
     after(async () => {
       try {
@@ -192,6 +200,8 @@ export async function POST(request: NextRequest) {
       // event fires — so the client's 1000-pt decay timer starts from this instant.
       capturedRoundStartTime = Date.now();
       updateGameState(roomId, { roundStartTime: capturedRoundStartTime });
+      // Update persisted row with the final roundStartTime so sync can compute timeLeft
+      upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: capturedRoundStartTime }).catch(() => {});
       const payload = { ...gameStartedBase, roundStartTime: capturedRoundStartTime };
 
       if (process.env.PUSHER_KEY && process.env.PUSHER_SECRET) {
@@ -243,6 +253,7 @@ export async function POST(request: NextRequest) {
     // would block it because phase !== 'drawing' || roundStartTime is old.
     if (roomId) {
       updateGameState(roomId, { phase: 'idle', imageUrl: null });
+      upsertActiveRound({ roomId, roundId: '', phase: 'idle', imageUrl: null, roundStartTime: null }).catch(() => {});
 
       // Notify connected clients so they can show a retry indicator immediately
       // instead of silently spinning until the poll wakeup fires.
