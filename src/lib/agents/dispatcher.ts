@@ -255,26 +255,37 @@ async function probeGroq(modelId: string, imageUrl: string): Promise<{ guess: st
 }
 
 async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  // Use fileData.fileUri — Google's infra can fetch fal.ai CDN URLs directly.
-  // Gemini 2.5 Pro/Flash are thinking models — by default they spend all tokens
-  // on reasoning and may return empty text(). Fix:
-  //   - thinkingBudget:0 disables extended thinking (valid REST param, not in SDK 0.24.1 types)
-  //   - maxOutputTokens:1024 provides ample room for the JSON response
-  //   - Extract text from parts[] directly as fallback in case text() returns ""
-  //   - Throw when still empty so caller shows ERROR badge (not phantom CORRECT)
+  // Image strategy per model:
+  //   Gemini 2.5 Pro  — with thinkingBudget:0, Pro cannot fetch fileData URLs
+  //     from fal.ai CDN. Pre-download as base64 inlineData (same as Anthropic/Groq).
+  //   Gemini 2.5 Flash — fileData.fileUri works reliably; skip download for speed.
+  // thinkingBudget:0 disables extended thinking for both models; without it, Pro
+  //   returns thinking-only output (text() = "") and Flash returns malformed JSON.
+  const isPro = /pro/i.test(modelId);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let imagePart: any;
+  if (isPro) {
+    const { base64, mimeType } = await downloadImageBase64(imageUrl);
+    imagePart = { inlineData: { mimeType, data: base64 } };
+  } else {
+    imagePart = { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } };
+  }
+
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
   const model = genAI.getGenerativeModel({ model: modelId });
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [
       { text: SYSTEM_PROMPT },
-      { fileData: { mimeType: 'image/jpeg', fileUri: imageUrl } },
+      imagePart,
     ]}],
+    // thinkingConfig not typed in SDK 0.24.1 but is a valid REST param
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     generationConfig: { maxOutputTokens: 1024, thinkingConfig: { thinkingBudget: 0 } } as any,
   });
 
-  // Try text() first; if empty, walk parts[] looking for a non-thinking text part
+  // Try text() first; if empty, walk parts[] for a non-thinking text part
   let rawText = result.response.text().trim();
   if (!rawText) {
     const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
@@ -282,7 +293,7 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
            ?? parts.find((p: any) => p.text)?.text?.trim()
            ?? '';
   }
-  if (!rawText) throw new Error('Gemini returned empty response (thinking-only output)');
+  if (!rawText) throw new Error('Gemini returned empty response');
   return parseGuessResponse(rawText);
 }
 
