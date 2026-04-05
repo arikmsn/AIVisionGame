@@ -84,7 +84,8 @@ async function generateImage(visualPrompt: string): Promise<string | null> {
   }
 
   try {
-    const res = await fetch('https://queue.fal.run/fal-ai/flux/schnell', {
+    // Use the sync fal.run endpoint (not the queued queue.fal.run which returns request_id)
+    const res = await fetch('https://fal.run/fal-ai/flux/schnell', {
       method:  'POST',
       headers: {
         'Authorization': `Key ${falKey}`,
