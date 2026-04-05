@@ -409,11 +409,17 @@ async function probeOpenRouter(modelId: string, imageUrl: string, systemPrompt: 
   return resp.choices[0]?.message?.content ?? '{}';
 }
 
-/** Replicate model path mapping — owner/name for models.get() */
-const REPLICATE_MODELS: Record<string, { owner: string; name: string }> = {
-  'qwen2.5-vl-72b-instruct':    { owner: 'lucataco',     name: 'qwen2.5-vl-72b-instruct' },
-  'internvl3-78b':               { owner: 'cjwbw',        name: 'internvl3-78b' },
-  'deepseek-ai/deepseek-vl2':   { owner: 'deepseek-ai',  name: 'deepseek-vl2' },
+/** Replicate model path mapping — owner/name + per-model schema overrides */
+const REPLICATE_MODELS: Record<string, {
+  owner:          string;
+  name:           string;
+  promptPrefix?:  string;   // prefix injected before the system prompt (e.g. "<image>\n")
+  maxTokensKey?:  string;   // field name for max output tokens (default: "max_tokens")
+}> = {
+  'qwen2.5-vl-72b-instruct':  { owner: 'lucataco',    name: 'qwen2.5-vl-72b-instruct' },
+  'internvl3-78b':             { owner: 'cjwbw',       name: 'internvl3-78b' },
+  // DeepSeek-VL2: uses max_new_tokens + requires <image> token in the prompt
+  'deepseek-ai/deepseek-vl2': { owner: 'deepseek-ai', name: 'deepseek-vl2', promptPrefix: '<image>\n', maxTokensKey: 'max_new_tokens' },
 };
 
 async function probeReplicate(modelId: string, imageUrl: string, systemPrompt: string): Promise<string> {
@@ -426,13 +432,16 @@ async function probeReplicate(modelId: string, imageUrl: string, systemPrompt: s
   const version = (modelInfo as any).latest_version?.id;
   if (!version) throw new Error(`Could not resolve ${modelPath.owner}/${modelPath.name} latest version`);
 
+  const promptText    = (modelPath.promptPrefix ?? '') + systemPrompt;
+  const maxTokensKey  = modelPath.maxTokensKey ?? 'max_tokens';
+
   const output = await replicate.run(
     `${modelPath.owner}/${modelPath.name}:${version}` as `${string}/${string}:${string}`,
     {
       input: {
-        image:      imageUrl,
-        prompt:     systemPrompt,
-        max_tokens: 512,
+        image:           imageUrl,
+        prompt:          promptText,
+        [maxTokensKey]:  512,
       },
     },
   );
