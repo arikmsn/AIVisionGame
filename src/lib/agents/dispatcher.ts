@@ -87,9 +87,9 @@ export const ARENA_AGENTS: AgentConfig[] = [
   },
   // ── xAI ─────────────────────────────────────────────────────────────────────
   {
-    modelId:       'grok-2-vision-1212',
+    modelId:       'grok-4.20-0309-non-reasoning',
     provider:      'xai',
-    label:         'Grok-2 Vision',
+    label:         'Grok 4.20',
     providerLabel: 'xAI',
     envKey:        'XAI_API_KEY',
     accentColor:   '#ef4444',
@@ -143,13 +143,13 @@ export const ARENA_AGENTS: AgentConfig[] = [
     accentColor:   '#a855f7',
     icon:          '🟣',
   },
-  // ── DeepSeek ────────────────────────────────────────────────────────────────
+  // ── DeepSeek (via Replicate) ─────────────────────────────────────────────────
   {
-    modelId:       'deepseek-vl2',
-    provider:      'deepseek',
+    modelId:       'deepseek-ai/deepseek-vl2',
+    provider:      'replicate',
     label:         'DeepSeek-VL2',
-    providerLabel: 'DeepSeek',
-    envKey:        'DeepSeek_API_KEY',
+    providerLabel: 'Replicate',
+    envKey:        'REPLICATE_API_TOKEN',
     accentColor:   '#3b82f6',
     icon:          '💎',
   },
@@ -411,8 +411,9 @@ async function probeOpenRouter(modelId: string, imageUrl: string, systemPrompt: 
 
 /** Replicate model path mapping — owner/name for models.get() */
 const REPLICATE_MODELS: Record<string, { owner: string; name: string }> = {
-  'qwen2.5-vl-72b-instruct': { owner: 'lucataco',  name: 'qwen2.5-vl-72b-instruct' },
-  'internvl3-78b':           { owner: 'cjwbw',      name: 'internvl3-78b' },
+  'qwen2.5-vl-72b-instruct':    { owner: 'lucataco',     name: 'qwen2.5-vl-72b-instruct' },
+  'internvl3-78b':               { owner: 'cjwbw',        name: 'internvl3-78b' },
+  'deepseek-ai/deepseek-vl2':   { owner: 'deepseek-ai',  name: 'deepseek-vl2' },
 };
 
 async function probeReplicate(modelId: string, imageUrl: string, systemPrompt: string): Promise<string> {
