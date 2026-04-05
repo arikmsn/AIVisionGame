@@ -40,21 +40,27 @@ export async function GET() {
   // ── Per-model aggregation ────────────────────────────────────────────────────
 
   const modelMap = new Map<string, {
-    total:       number;
-    correct:     number;
-    errorCount:  number;
-    latencies:   number[]; // only from non-error runs
+    total:           number;
+    correct:         number;
+    keyMissingCount: number; // error = 'key_missing' — config issue, not a reliability failure
+    errorCount:      number; // real provider errors (non key_missing)
+    latencies:       number[]; // only from clean (non-error, non-key-missing) runs
   }>();
 
   for (const row of rows) {
     if (!modelMap.has(row.model_id)) {
-      modelMap.set(row.model_id, { total: 0, correct: 0, errorCount: 0, latencies: [] });
+      modelMap.set(row.model_id, { total: 0, correct: 0, keyMissingCount: 0, errorCount: 0, latencies: [] });
     }
     const m = modelMap.get(row.model_id)!;
     m.total++;
     if (row.is_correct) m.correct++;
-    if (row.error)      m.errorCount++;
-    else if (row.latency_ms !== null) m.latencies.push(row.latency_ms);
+    if (row.error === 'key_missing') {
+      m.keyMissingCount++;
+    } else if (row.error) {
+      m.errorCount++;
+    } else if (row.latency_ms !== null) {
+      m.latencies.push(row.latency_ms);
+    }
   }
 
   const leaderboard = [...modelMap.entries()]
@@ -64,9 +70,14 @@ export async function GET() {
       const avgLatencyMs = m.latencies.length > 0
         ? Math.round(m.latencies.reduce((a, b) => a + b, 0) / m.latencies.length)
         : null;
-      const reliabilityRate = m.total > 0
-        ? ((m.total - m.errorCount) / m.total) * 100
-        : 100;
+
+      // Reliability = clean responses / attempted responses.
+      // key_missing rows are excluded from both numerator and denominator —
+      // a missing API key is a config issue, not a provider reliability failure.
+      const attemptedRuns  = m.total - m.keyMissingCount;
+      const reliabilityRate = attemptedRuns > 0
+        ? ((attemptedRuns - m.errorCount) / attemptedRuns) * 100
+        : null; // all runs were key_missing — model not configured
 
       return {
         modelId,
@@ -77,8 +88,9 @@ export async function GET() {
         correctCount:    m.correct,
         successRate:     Math.round(successRate * 10) / 10,  // 1 dp
         avgLatencyMs,
+        cleanRunCount:   m.latencies.length,  // non-error, non-key-missing runs
         errorCount:      m.errorCount,
-        reliabilityRate: Math.round(reliabilityRate * 10) / 10,
+        reliabilityRate: reliabilityRate !== null ? Math.round(reliabilityRate * 10) / 10 : null,
       };
     })
     // Sort: primary = successRate desc, secondary = avgLatency asc (faster = better tie-break)
@@ -91,8 +103,9 @@ export async function GET() {
 
   // ── Speed King (model with lowest avg latency, ≥ 3 non-error runs) ───────────
 
+  // Speed King: model with lowest avg latency across ≥ 3 clean (non-error, non-key-missing) runs
   const speedKing = leaderboard
-    .filter(m => m.avgLatencyMs !== null && (m.totalRuns - m.errorCount) >= 3)
+    .filter(m => m.avgLatencyMs !== null && m.cleanRunCount >= 3)
     .sort((a, b) => (a.avgLatencyMs ?? Infinity) - (b.avgLatencyMs ?? Infinity))[0] ?? null;
 
   // ── Hardest Idioms ────────────────────────────────────────────────────────────

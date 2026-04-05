@@ -303,8 +303,9 @@ interface LeaderboardEntry {
   correctCount:    number;
   successRate:     number;
   avgLatencyMs:    number | null;
+  cleanRunCount:   number;
   errorCount:      number;
-  reliabilityRate: number;
+  reliabilityRate: number | null; // null when model has no API key configured
 }
 
 interface StatsPayload {
@@ -323,10 +324,17 @@ function GlobalStats({ refreshKey }: { refreshKey: number }) {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/benchmark/stats')
-      .then(r => r.json())
-      .then((data: StatsPayload) => { setStats(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    // After a completed run (refreshKey > 0) give the fire-and-forget DB
+    // writes ~2 s to land before querying stats.  On initial mount (refreshKey
+    // === 0) fetch immediately so the leaderboard shows right away.
+    const delay = refreshKey > 0 ? 2000 : 0;
+    const t = setTimeout(() => {
+      fetch('/api/benchmark/stats')
+        .then(r => r.json())
+        .then((data: StatsPayload) => { setStats(data); setLoading(false); })
+        .catch(() => setLoading(false));
+    }, delay);
+    return () => clearTimeout(t);
   }, [refreshKey]);
 
   const cell: React.CSSProperties = {
@@ -477,15 +485,17 @@ function GlobalStats({ refreshKey }: { refreshKey: number }) {
                       {m.avgLatencyMs !== null ? `${(m.avgLatencyMs / 1000).toFixed(1)}s` : '—'}
                     </td>
                     <td style={{ ...cell, textAlign: 'right', fontFamily: 'monospace', fontSize: '11px',
-                      color: m.reliabilityRate >= 90 ? '#10b981' : m.reliabilityRate >= 70 ? '#f59e0b' : '#ef4444' }}>
-                      {m.reliabilityRate}%
+                      color: m.reliabilityRate === null ? '#4b5563'
+                           : m.reliabilityRate >= 90 ? '#10b981'
+                           : m.reliabilityRate >= 70 ? '#f59e0b' : '#ef4444' }}>
+                      {m.reliabilityRate !== null ? `${m.reliabilityRate}%` : '—'}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <div style={{ padding: '8px 14px', fontSize: '10px', color: '#374151', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-              Win % = correct guesses / total runs · Reliability = non-error runs / total runs
+              Win % = correct / total runs · Reliability = error-free responses / configured attempts (key_missing excluded)
             </div>
           </div>
 
@@ -631,7 +641,6 @@ export default function BenchmarkPage() {
         startedAt: Date.now(),
       };
       setRun(newRun);
-      setRunCount(c => c + 1);
       setIsStarting(false);
 
       // 2. Fire all 10 probes in parallel — each updates its card when resolved
@@ -675,8 +684,9 @@ export default function BenchmarkPage() {
       );
 
       await Promise.allSettled(probes);
-      // All done — reveal the phrase
+      // All done — reveal the phrase, then trigger stats refresh
       setRevealPhrase(true);
+      setRunCount(c => c + 1);
     } catch (err: any) {
       console.error('[BENCHMARK] Start error:', err.message);
       setIsStarting(false);
