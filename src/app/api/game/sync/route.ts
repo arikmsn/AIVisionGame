@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
   const identity = token ? resolveAgentKey(token) : null;
 
   const localState = getFullGameState(roomId);
+  console.log(`[SYNC] GET room="${roomId}" localPhase="${localState.phase}" roundId="${localState.roundId || 'none'}"`);
 
   // ── Cross-instance fallback ──────────────────────────────────────────────
   // On Vercel, each serverless invocation may run in a separate process with
@@ -46,9 +47,10 @@ export async function GET(request: NextRequest) {
   let guesses          = localState.guesses;
 
   if (phase === 'idle') {
+    console.log(`[SYNC] Local store idle — attempting Supabase fallback for room="${roomId}"`);
     const persisted = await fetchActiveRound(roomId);
     if (persisted && persisted.phase !== 'idle') {
-      console.log(`[SYNC] 🔄 Cross-instance fallback for room "${roomId}": persisted phase="${persisted.phase}"`);
+      console.log(`[SYNC] ✅ Cross-instance fallback OK room="${roomId}" phase="${persisted.phase}" round="${persisted.roundId}"`);
       // Cast is safe: persisted.phase comes from the same codebase that writes it
       phase          = persisted.phase as GamePhase;
       imageUrl       = persisted.imageUrl;
@@ -56,6 +58,8 @@ export async function GET(request: NextRequest) {
       roundStartTime = persisted.roundStartTime;
       // guesses not persisted cross-instance — return empty (agents only need image + roundId)
       guesses        = [];
+    } else {
+      console.log(`[SYNC] ℹ️  Supabase also idle/empty for room="${roomId}" — returning idle`);
     }
   }
 

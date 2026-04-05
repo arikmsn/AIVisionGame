@@ -164,10 +164,11 @@ export async function POST(request: NextRequest) {
       guesses: [],
     });
 
-    // Cross-instance persistence: write to Supabase so cold Vercel instances
-    // can serve /api/game/sync even if they didn't handle this start-round call.
-    // Fire-and-forget — never blocks the broadcast path.
-    upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: null }).catch(() => {});
+    // ── Cross-instance persistence (AWAITED) ────────────────────────────────
+    // MUST be awaited — fire-and-forget upserts are abandoned by Vercel before
+    // the outgoing fetch resolves. This call confirms the row is in Supabase
+    // before we proceed to broadcast, so cold sync instances find it immediately.
+    await upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: null });
 
     // ── Kick off bot orchestration via after() ───────────────────────────────
     after(async () => {
@@ -200,8 +201,12 @@ export async function POST(request: NextRequest) {
       // event fires — so the client's 1000-pt decay timer starts from this instant.
       capturedRoundStartTime = Date.now();
       updateGameState(roomId, { roundStartTime: capturedRoundStartTime });
-      // Update persisted row with the final roundStartTime so sync can compute timeLeft
-      upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: capturedRoundStartTime }).catch(() => {});
+      // Update persisted row with the final roundStartTime (AWAITED — see note above).
+      // In the delayed-broadcast path this runs inside setTimeout, i.e. after the
+      // response has been sent. We accept that race: the preliminary upsert (below)
+      // already wrote the row, so sync will see phase=drawing even if this update
+      // is lost. Here we just upgrade it with the accurate roundStartTime.
+      await upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: capturedRoundStartTime });
       const payload = { ...gameStartedBase, roundStartTime: capturedRoundStartTime };
 
       if (process.env.PUSHER_KEY && process.env.PUSHER_SECRET) {
@@ -229,6 +234,11 @@ export async function POST(request: NextRequest) {
       capturedRoundStartTime = Date.now();
       updateGameState(roomId, { roundStartTime: capturedRoundStartTime });
       console.log(`[START-ROUND] ⏳ Image ready in ${elapsed}ms — holding broadcast for ${remainingDelay}ms more`);
+      // Persist to Supabase NOW (before we return the response) so cold sync
+      // instances see phase=drawing immediately. fireBroadcast will attempt a
+      // second upsert with the same roundStartTime inside the setTimeout, but
+      // that's a best-effort upgrade that may be abandoned post-response.
+      await upsertActiveRound({ roomId, roundId, phase: 'drawing', imageUrl, roundStartTime: capturedRoundStartTime });
       setTimeout(fireBroadcast, remainingDelay);
     } else {
       await fireBroadcast();
@@ -253,7 +263,10 @@ export async function POST(request: NextRequest) {
     // would block it because phase !== 'drawing' || roundStartTime is old.
     if (roomId) {
       updateGameState(roomId, { phase: 'idle', imageUrl: null });
-      upsertActiveRound({ roomId, roundId: '', phase: 'idle', imageUrl: null, roundStartTime: null }).catch(() => {});
+      // Reset Supabase row so sync no longer returns stale drawing state
+      upsertActiveRound({ roomId, roundId: '', phase: 'idle', imageUrl: null, roundStartTime: null }).catch(
+        (e) => console.warn('[START-ROUND] Failed to reset active_rounds on error:', e?.message),
+      );
 
       // Notify connected clients so they can show a retry indicator immediately
       // instead of silently spinning until the poll wakeup fires.
