@@ -88,6 +88,8 @@ const URGENCY_SEC_BY_STYLE: Record<string, number> = {
 };
 /** Typing indicator fires this many ms before the actual LLM call begins */
 const TYPING_LEAD_MS  = 800;
+/** Maximum time (ms) a round is allowed to run before a timeout is declared */
+const ROUND_TIMEOUT_MS = 30_000;
 
 // ── Pusher ────────────────────────────────────────────────────────────────────
 
@@ -192,6 +194,43 @@ function opportunityAssessment(
 }
 
 // ── Submit guess ──────────────────────────────────────────────────────────────
+// ── Round timeout ─────────────────────────────────────────────────────────────
+// Fires when no player guesses correctly within ROUND_TIMEOUT_MS.
+// Broadcasts round-solved with winner:null so every client shows the answer.
+
+async function fireRoundTimeout(roomId: string, roundId: string): Promise<void> {
+  const cur = getGameState(roomId);
+  if (!cur || cur.roundId !== roundId || cur.phase !== 'drawing') return; // already won
+
+  const secretPrompt = cur.secretPrompt ?? '';
+  const hasPusher    = !!(process.env.PUSHER_KEY && process.env.PUSHER_SECRET);
+  const scoreboard   = getScoreboard(roomId);
+
+  console.log(`[ORCHESTRATE] ⏰ Round timeout — no winner after ${ROUND_TIMEOUT_MS / 1000}s room=${roomId} round=${roundId} secret="${secretPrompt}"`);
+
+  updateGameState(roomId, { phase: 'winner', winner: null });
+
+  if (hasPusher) {
+    try {
+      await pusherServer.trigger(`presence-${roomId}`, 'round-solved', {
+        winner:      null,
+        secret:      secretPrompt,
+        timedOut:    true,
+        points:      0,
+        scoreboard,
+        nextRoundIn: 5,
+      });
+      console.log(`[ORCHESTRATE] ⏰ round-solved(timeout) broadcast → presence-${roomId}`);
+    } catch (err: any) {
+      console.error('[ORCHESTRATE] timeout round-solved Pusher error:', err.message);
+    }
+    // Broadcast to global activity channel
+    pusherServer.trigger('global-activity', 'arena-timeout', {
+      roomId, secret: secretPrompt, timestamp: Date.now(),
+    }).catch(() => {});
+  }
+}
+
 // Direct in-process implementation — no HTTP self-ping to /api/game/validate.
 // Replicates the full validate route logic:
 //   1. strictIdiomMatch for correctness (pure, zero latency)
@@ -757,8 +796,10 @@ export async function runOrchestratorAsync(
   // loops attempts.  Using await-based sleep keeps this async function's
   // Promise pending — which keeps the Vercel instance alive — rather than
   // relying on setTimeout callbacks that are discarded after response.
-  await Promise.allSettled(
-    AGENT_REGISTRY.map(async (agent) => {
+  await Promise.allSettled([
+    // 30-second round timeout — fires if no correct guess is made in time
+    sleep(ROUND_TIMEOUT_MS).then(() => fireRoundTimeout(roomId, roundId)),
+    ...AGENT_REGISTRY.map(async (agent) => {
       const jitter = randInt(JITTER_MIN_MS, JITTER_MAX_MS);
       console.log(`[ORCHESTRATE] 📡 Async registering ${agent.name} — entry jitter ${jitter}ms`);
 
@@ -808,7 +849,7 @@ export async function runOrchestratorAsync(
         if (attempt < MAX_ATTEMPTS - 1) await sleep(1_500);
       }
     }),
-  );
+  ]);
 
   // Release lock
   if (orchestratingRooms.get(roomId) === roundId) {

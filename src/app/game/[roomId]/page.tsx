@@ -232,6 +232,7 @@ export default function GamePage() {
   const [guessText, setGuessText] = useState('');
   const [lastHint, setLastHint] = useState<string | null>(null);
   const [showWinner, setShowWinner] = useState(false);
+  const [roundTimedOut, setRoundTimedOut] = useState(false);
   const [isWinner, setIsWinner] = useState(false);
   const [loading, setLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -708,7 +709,10 @@ export default function GamePage() {
       setGuessHistory([]);
       // setImageLoaded removed
       isGeneratingRef.current = false;
-      setRoundStartTime(data.roundStartTime ?? Date.now());
+      // Use client receive-time as the local decay timer start — gives exactly 1000 pts
+      // at the moment game-started arrives, independent of network latency.
+      setRoundStartTime(Date.now());
+      setRoundTimedOut(false);
       setBotTypingNames([]);
       setVictoryBotColor(null);
       setIntelligenceEvents([]); // fresh slate each round
@@ -738,17 +742,18 @@ export default function GamePage() {
     };
 
     const handleRoundSolved = (data: {
-      winner: string;
+      winner: string | null;
       secret: string;
+      timedOut?: boolean;
       points?: number;
       nextRoundIn?: number;
       scoreboard?: Record<string, { score: number; streak: number }>;
     }) => {
-      console.log('📡 [PUSHER] round-solved ▶', { winner: data.winner, secret: data.secret, nextRoundIn: data.nextRoundIn, points: data.points });
-      const won = data.winner === localNameRef.current;
-      const winnerBotConfig = getAgentByName(data.winner);
+      const timedOut = data.timedOut === true || data.winner === null;
+      console.log('📡 [PUSHER] round-solved ▶', { winner: data.winner, timedOut, secret: data.secret?.slice(0, 30), nextRoundIn: data.nextRoundIn, points: data.points });
+      const won = !timedOut && data.winner === localNameRef.current;
+      const winnerBotConfig = data.winner ? getAgentByName(data.winner) : null;
       setVictoryBotColor(winnerBotConfig ? winnerBotConfig.accentColor : null);
-      console.log('[round-solved] I am', localNameRef.current, '| won:', won);
 
       // Stop the decaying points timer immediately
       if (scoreIntervalRef.current) {
@@ -756,18 +761,19 @@ export default function GamePage() {
         scoreIntervalRef.current = null;
       }
 
-      setWinnerName(data.winner);
+      setRoundTimedOut(timedOut);
+      setWinnerName(data.winner ?? null);
       setShowWinner(true);
       setIsWinner(won);
       setPhase('winner');
-      console.log('[round-solved] ✅ setPhase(winner) + setCountdownActive(true) fired');
+      console.log('[round-solved] ✅ phase=winner timedOut=', timedOut, 'winner=', data.winner);
       setCountdownActive(true);
       setCountdownSeconds(data.nextRoundIn ?? 5);
 
-      // Authoritative secret from server
+      // Authoritative secret from server — always reveal on timeout
       if (data.secret) {
         setSecretPrompt(data.secret);
-        setLastHint(`The answer was: ${data.secret}`);
+        if (!timedOut) setLastHint(`The answer was: ${data.secret}`);
       }
 
       // Update leaderboard from server scoreboard (single source of truth)
@@ -776,7 +782,6 @@ export default function GamePage() {
           .map(([player, s]) => ({ player, score: s.score, streak: s.streak }))
           .sort((a, b) => b.score - a.score);
         setLeaderboard(entries);
-        // Keep local score in sync with server
         const myEntry = data.scoreboard[localNameRef.current];
         if (myEntry) setScore(myEntry.score);
       } else if (won && data.points) {
@@ -784,7 +789,6 @@ export default function GamePage() {
       }
 
       if (won) triggerConfetti();
-      // Server drives the next round — no client-side trigger needed
     };
 
     const handleGameReset = (data: { triggeredBy: string }) => {
@@ -1676,27 +1680,49 @@ export default function GamePage() {
           style={{ background: 'rgba(5,5,16,0.94)', backdropFilter: 'blur(14px)' }}
         >
           <div className="text-center px-4 max-w-lg w-full" dir="rtl">
-            {/* Trophy with spring bounce */}
+            {/* Icon with spring bounce */}
             <motion.p className="text-6xl mb-3"
               initial={{ scale: 0, rotate: -30 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: 'spring', stiffness: 300, damping: 14, delay: 0.1 }}
-            >{isWinner ? '🏆' : '🎊'}</motion.p>
+            >{roundTimedOut ? '⏰' : isWinner ? '🏆' : '🎊'}</motion.p>
 
-            {/* Winner headline */}
-            <motion.h2 className="text-3xl font-bold text-white mb-3 tracking-tight"
+            {/* Headline */}
+            <motion.h2 className="text-3xl font-bold mb-1 tracking-tight"
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+              style={{ color: roundTimedOut ? '#fb923c' : 'white' }}
             >
-              {isWinner ? t.countdownTitleWin : `${winnerName || ''} ${t.someoneWon}`}
+              {roundTimedOut
+                ? "Time's Up!"
+                : isWinner ? t.countdownTitleWin : `${winnerName || ''} ${t.someoneWon}`}
             </motion.h2>
+            {roundTimedOut && (
+              <motion.p className="text-sm text-gray-500 mb-3"
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+              >
+                No one guessed the idiom — here's what it was:
+              </motion.p>
+            )}
 
             {/* Answer card */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 }}
+              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: roundTimedOut ? 0.35 : 0.3 }}
               className="rounded-xl p-4 mb-4 text-right"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.09)', backdropFilter: 'blur(20px)' }}
+              style={{
+                background: roundTimedOut ? 'rgba(251,146,60,0.06)' : 'rgba(255,255,255,0.04)',
+                border: roundTimedOut ? '1px solid rgba(251,146,60,0.25)' : '1px solid rgba(255,255,255,0.09)',
+                backdropFilter: 'blur(20px)',
+              }}
             >
-              <p className="text-3xl font-bold text-yellow-300 mb-2" style={{ textShadow: '0 0 20px rgba(251,191,36,0.4)' }}>{secretPrompt}</p>
+              {roundTimedOut && (
+                <p className="text-[10px] text-orange-500 font-bold tracking-widest uppercase mb-2">📖 The Answer</p>
+              )}
+              <p className="font-bold text-yellow-300 mb-2"
+                style={{
+                  fontSize: roundTimedOut ? '2.5rem' : '1.875rem',
+                  textShadow: roundTimedOut ? '0 0 30px rgba(251,191,36,0.6)' : '0 0 20px rgba(251,191,36,0.4)',
+                }}
+              >{secretPrompt}</p>
               {currentExplanation && (
                 <div className="mt-2">
                   <span className="text-xs px-2 py-1 rounded-full font-bold"

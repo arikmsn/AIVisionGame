@@ -145,18 +145,15 @@ export async function POST(request: NextRequest) {
     const requestId = submitData.request_id || submitData.id;
     const imageUrl = await waitForFalResult(requestId);
 
-    // Single source-of-truth timestamp — used in both the store and the Pusher payload
-    const roundStartTime = Date.now();
-
-    // Persist to store BEFORE broadcasting so late-joiners who poll /api/game/state
-    // immediately get the correct image.
+    // Persist state to store BEFORE broadcasting so late-joiners who poll /api/game/state
+    // immediately get the correct image. roundStartTime is set inside fireBroadcast so it
+    // captures the exact moment the Pusher event fires — clients receive t=0 = 1000 pts.
     updateGameState(roomId, {
       phase: 'drawing',
       imageUrl,
       secretPrompt: idiom.he,
       explanation: idiom.explanation,
       category: 'idiom',
-      roundStartTime,
       roundId,
       countdownActive: false,
       countdownSeconds: 5,
@@ -165,11 +162,6 @@ export async function POST(request: NextRequest) {
     });
 
     // ── Kick off bot orchestration via after() ───────────────────────────────
-    // `after()` tells Next.js / Vercel to keep this function instance alive
-    // after the HTTP response is returned, for up to maxDuration (60s).
-    // runOrchestratorAsync uses await-based sleep so the Promise stays pending
-    // and the instance stays alive while agents are guessing — unlike the
-    // previous setTimeout approach whose callbacks were discarded on response.
     after(async () => {
       try {
         console.log('[START-ROUND] 🤖 [after] runOrchestratorAsync | roomId:', roomId, '| roundId:', roundId);
@@ -180,63 +172,66 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Broadcast to every client in the room.
-    // Store is already written above — polling clients will find it immediately.
-    // We fire the Pusher event TWICE (primary + 500 ms follow-up) so late-subscribers
-    // who missed the first delivery still receive the authoritative imageUrl.
-    //
-    // When delayBroadcastMs > 0 (prefetch path from validate), we hold the broadcast
-    // until max(0, delayBroadcastMs - elapsed_generation_time) ms so the victory
-    // countdown finishes before clients transition to the new round.
-    if (process.env.PUSHER_KEY && process.env.PUSHER_SECRET) {
-      const gameStartedPayload = {
-        imageUrl,
-        prompt: idiom.he,       // Hebrew secret — used for local match and display
-        promptEn: idiom.en,     // English equivalent — enables bilingual guessing
-        category: 'idiom',
-        roomId,
-        explanation: idiom.explanation,
-        roundStartTime,
-        roundId,                // cache-buster: clients use as React key on <img>
-      };
+    // roundStartTime is captured inside fireBroadcast for maximum freshness.
+    // For the delayed-broadcast path (delayBroadcastMs > 0) we write a preliminary
+    // value to the store so the orchestrator / polling clients can see it immediately.
+    let capturedRoundStartTime = 0;
 
-      const fireBroadcast = async () => {
+    const gameStartedBase = {
+      imageUrl,
+      prompt:       idiom.he,
+      promptEn:     idiom.en,
+      category:     'idiom',
+      roomId,
+      explanation:  idiom.explanation,
+      roundId,
+    };
+
+    const fireBroadcast = async () => {
+      // Set roundStartTime at the last possible moment — right before the Pusher
+      // event fires — so the client's 1000-pt decay timer starts from this instant.
+      capturedRoundStartTime = Date.now();
+      updateGameState(roomId, { roundStartTime: capturedRoundStartTime });
+      const payload = { ...gameStartedBase, roundStartTime: capturedRoundStartTime };
+
+      if (process.env.PUSHER_KEY && process.env.PUSHER_SECRET) {
         try {
-          await pusherServer.trigger(`presence-${roomId}`, 'game-started', gameStartedPayload);
+          await pusherServer.trigger(`presence-${roomId}`, 'game-started', payload);
           console.log('[START-ROUND] ✅ game-started broadcast #1 → presence-' + roomId, '| image:', imageUrl.slice(0, 60));
         } catch (pusherErr: any) {
           console.error('[START-ROUND] Pusher error (first broadcast):', pusherErr.message);
         }
-        // Second broadcast 500 ms later — catches clients that subscribed during the first trigger
+        // Second broadcast 500 ms later — catches late subscribers
         setTimeout(async () => {
           try {
-            await pusherServer.trigger(`presence-${roomId}`, 'game-started', gameStartedPayload);
+            await pusherServer.trigger(`presence-${roomId}`, 'game-started', payload);
             console.log('[START-ROUND] ✅ game-started broadcast #2 (500ms) → presence-' + roomId);
-          } catch {
-            // Non-critical — polling will cover any remaining stragglers
-          }
+          } catch { /* non-critical */ }
         }, 500);
-      };
-
-      const elapsed = Date.now() - callStart;
-      const remainingDelay = Math.max(0, delayBroadcastMs - elapsed);
-
-      if (remainingDelay > 0) {
-        console.log(`[START-ROUND] ⏳ Image ready in ${elapsed}ms — holding broadcast for ${remainingDelay}ms more`);
-        setTimeout(fireBroadcast, remainingDelay);
-      } else {
-        await fireBroadcast();
       }
+    };
+
+    const elapsed = Date.now() - callStart;
+    const remainingDelay = Math.max(0, delayBroadcastMs - elapsed);
+
+    if (remainingDelay > 0) {
+      // Preliminary roundStartTime for the response body and store
+      capturedRoundStartTime = Date.now();
+      updateGameState(roomId, { roundStartTime: capturedRoundStartTime });
+      console.log(`[START-ROUND] ⏳ Image ready in ${elapsed}ms — holding broadcast for ${remainingDelay}ms more`);
+      setTimeout(fireBroadcast, remainingDelay);
+    } else {
+      await fireBroadcast();
     }
 
     return NextResponse.json({
-      success: true,
+      success:      true,
       imageUrl,
-      secret: idiom.he,
-      secretEn: idiom.en,
-      explanation: idiom.explanation,
-      category: 'idiom',
-      roundStartTime,
+      secret:       idiom.he,
+      secretEn:     idiom.en,
+      explanation:  idiom.explanation,
+      category:     'idiom',
+      roundStartTime: capturedRoundStartTime,
       roundId,
     });
   } catch (error: any) {

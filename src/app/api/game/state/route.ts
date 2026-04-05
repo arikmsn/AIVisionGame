@@ -3,7 +3,7 @@ import { getFullGameState } from '@/lib/gameStore';
 
 // If a room is stuck in 'winner' phase for longer than this without a new round
 // starting (i.e. the prefetch/generation failed), signal clients to retry.
-const STALE_WINNER_MS = 20_000;
+const STALE_WINNER_MS = 7_000;
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
