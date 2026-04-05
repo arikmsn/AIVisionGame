@@ -297,14 +297,19 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
 }
 
 async function probeReplicate(imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  // Use the Replicate SDK (replicate.run) with the correct yorickvp/llava-13b version.
-  // The previous REST call used an outdated version hash and max_new_tokens (wrong key).
-  // imageUrl must be a public HTTP(S) URL — Replicate rejects base64 data URIs in this
-  // field. Since fal.ai generates public URLs for benchmark images, pass it directly.
+  // Use the Replicate SDK with yorickvp/llava-13b.
+  // Resolve the latest version dynamically via models.get() — hardcoded hashes become
+  // stale when Replicate deprecates older versions (causes 422 "invalid version").
+  // imageUrl must be a public HTTP(S) URL; fal.ai benchmark images are public URLs.
   const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
+  // Get the latest published version hash dynamically
+  const modelInfo = await replicate.models.get('yorickvp', 'llava-13b');
+  const version = (modelInfo as any).latest_version?.id;
+  if (!version) throw new Error('Could not resolve yorickvp/llava-13b latest version');
+
   const output = await replicate.run(
-    'yorickvp/llava-13b:b5f47172745771f06018243d167238299619939462d1d23c596660b57e4e1951',
+    `yorickvp/llava-13b:${version}` as `${string}/${string}:${string}`,
     {
       input: {
         image:      imageUrl,
