@@ -22,6 +22,7 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
+import Replicate from 'replicate';
 
 // ── Agent registry ────────────────────────────────────────────────────────────
 
@@ -296,34 +297,25 @@ async function probeGoogle(modelId: string, imageUrl: string): Promise<{ guess: 
 }
 
 async function probeReplicate(imageUrl: string): Promise<{ guess: string; strategy: string }> {
-  const token   = process.env.REPLICATE_API_TOKEN;
-  const VERSION = 'a305f1a671c330654f9b058dbe22e08ba2fb7a56ef5cbf394fedb8e9c28f7427'; // LLaVA 13B
+  // Use the Replicate SDK (replicate.run) with the correct yorickvp/llava-13b version.
+  // The previous REST call used an outdated version hash and max_new_tokens (wrong key).
+  // imageUrl must be a public HTTP(S) URL — Replicate rejects base64 data URIs in this
+  // field. Since fal.ai generates public URLs for benchmark images, pass it directly.
+  const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
 
-  const submitRes = await fetch('https://api.replicate.com/v1/predictions', {
-    method: 'POST',
-    headers: { 'Authorization': `Token ${token}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ version: VERSION, input: { image: imageUrl, prompt: SYSTEM_PROMPT, max_new_tokens: 256 } }),
-    signal:  AbortSignal.timeout(10_000),
-  });
-  if (!submitRes.ok) throw new Error(`Replicate submit ${submitRes.status}`);
-  const { id: predId, urls } = await submitRes.json();
-  const pollUrl = urls?.get ?? `https://api.replicate.com/v1/predictions/${predId}`;
+  const output = await replicate.run(
+    'yorickvp/llava-13b:b5f47172745771f06018243d167238299619939462d1d23c596660b57e4e1951',
+    {
+      input: {
+        image:      imageUrl,
+        prompt:     "Identify the English idiom depicted in this image. Respond ONLY with valid JSON (no markdown): {\"guess\": \"<idiom phrase>\", \"strategy\": \"<brief reason>\"}",
+        max_tokens: 512,
+      },
+    },
+  );
 
-  const deadline = Date.now() + 25_000;
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, 2000));
-    const poll = await fetch(pollUrl, {
-      headers: { 'Authorization': `Token ${token}` },
-      signal:  AbortSignal.timeout(5_000),
-    });
-    const pred = await poll.json();
-    if (pred.status === 'succeeded') {
-      const out = Array.isArray(pred.output) ? pred.output.join('') : String(pred.output ?? '');
-      return parseGuessResponse(out);
-    }
-    if (pred.status === 'failed') throw new Error('Replicate prediction failed');
-  }
-  throw new Error('Replicate prediction timed out');
+  const out = Array.isArray(output) ? (output as string[]).join('') : String(output ?? '');
+  return parseGuessResponse(out);
 }
 
 async function probeMistral(imageUrl: string): Promise<{ guess: string; strategy: string }> {
