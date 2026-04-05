@@ -25,7 +25,8 @@ const AGENT_META = Object.fromEntries(
 );
 
 export async function GET() {
-  const rows = await fetchAllBenchmarkResults(5000);
+  // Exclude mock-agent rows — they are synthetic and must not pollute real stats
+  const rows = (await fetchAllBenchmarkResults(5000)).filter(r => r.model_id !== 'mock-agent');
 
   if (rows.length === 0) {
     return NextResponse.json({

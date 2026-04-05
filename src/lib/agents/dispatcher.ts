@@ -28,7 +28,7 @@ import Replicate from 'replicate';
 
 export interface AgentConfig {
   modelId:       string;
-  provider:      'openai' | 'anthropic' | 'groq' | 'google' | 'replicate' | 'mistral' | 'mock';
+  provider:      'openai' | 'anthropic' | 'groq' | 'google' | 'replicate' | 'mistral';
   label:         string;
   providerLabel: string;
   envKey:        string | null;
@@ -122,15 +122,6 @@ export const BENCHMARK_AGENTS: AgentConfig[] = [
     envKey:        'MISTRAL_API_KEY',
     accentColor:   '#06b6d4',
     icon:          '🌊',
-  },
-  {
-    modelId:       'mock-agent',
-    provider:      'mock',
-    label:         'Mock Agent',
-    providerLabel: 'Test',
-    envKey:        null,
-    accentColor:   '#6b7280',
-    icon:          '🤖',
   },
 ];
 
@@ -342,17 +333,6 @@ async function probeMistral(imageUrl: string): Promise<{ guess: string; strategy
   return parseGuessResponse(data.choices?.[0]?.message?.content ?? '{}');
 }
 
-const MOCK_GUESSES = [
-  'Piece of cake', 'Barking up the wrong tree', 'Spill the beans',
-  'Break a leg', 'Hit the nail on the head', 'Elephant in the room',
-  'Raining cats and dogs', 'Bite the bullet', 'On thin ice', 'Wild goose chase',
-];
-
-function probeMock(): { guess: string; strategy: string } {
-  const g = MOCK_GUESSES[Math.floor(Math.random() * MOCK_GUESSES.length)];
-  return { guess: g, strategy: 'Mock agent — no real analysis performed' };
-}
-
 // ── Main dispatcher ───────────────────────────────────────────────────────────
 // 55s per-call budget: up to 15s image download + up to 40s for inference
 // (probe route maxDuration = 60s)
@@ -366,7 +346,7 @@ export async function dispatchProbe(modelId: string, imageUrl: string): Promise<
   }
 
   const isKeyMissing = agent.envKey !== null && !process.env[agent.envKey];
-  if (isKeyMissing && agent.provider !== 'mock') {
+  if (isKeyMissing) {
     return { modelId, guess: '', strategy: '', latencyMs: 0, isKeyMissing: true };
   }
 
@@ -387,11 +367,9 @@ export async function dispatchProbe(modelId: string, imageUrl: string): Promise<
       case 'groq':      result = await withTimeout(probeGroq(modelId, imageUrl));      break;
       case 'google':    result = await withTimeout(probeGoogle(modelId, imageUrl));    break;
       case 'replicate': result = await withTimeout(probeReplicate(imageUrl));          break;
-      case 'mistral':   result = await withTimeout(probeMistral(imageUrl));            break;
-      case 'mock':
+      case 'mistral':
       default:
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 1400));
-        result = probeMock();
+        result = await withTimeout(probeMistral(imageUrl));
         break;
     }
     return { modelId, ...result, latencyMs: Date.now() - t0, isKeyMissing: false };
