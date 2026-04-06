@@ -43,7 +43,7 @@ async function publishNextRound(tournamentId: string): Promise<void> {
   const targetUrl = `https://${baseUrl.replace(/^https?:\/\//, '')}/api/arena/tournament/${tournamentId}/chain`;
   const secret    = process.env.CHAIN_SECRET;
 
-  const res = await fetch(`https://qstash.upstash.io/v2/publish/${encodeURIComponent(targetUrl)}`, {
+  const res = await fetch(`https://qstash.upstash.io/v2/publish/${targetUrl}`, {
     method:  'POST',
     headers: {
       'Authorization':    `Bearer ${token}`,

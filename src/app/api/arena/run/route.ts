@@ -44,7 +44,9 @@ async function kickOffChain(tournamentId: string): Promise<boolean> {
   const targetUrl = `https://${baseUrl.replace(/^https?:\/\//, '')}/api/arena/tournament/${tournamentId}/chain`;
   const secret    = process.env.CHAIN_SECRET;
 
-  const res = await fetch(`https://qstash.upstash.io/v2/publish/${encodeURIComponent(targetUrl)}`, {
+  console.log(`[RUN] QStash target: ${targetUrl} | token_present=${!!token}`);
+
+  const res = await fetch(`https://qstash.upstash.io/v2/publish/${targetUrl}`, {
     method:  'POST',
     headers: {
       'Authorization':    `Bearer ${token}`,
@@ -57,9 +59,11 @@ async function kickOffChain(tournamentId: string): Promise<boolean> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    console.error(`[RUN] QStash kick-off failed for ${tournamentId}: HTTP ${res.status} — ${text.slice(0, 200)}`);
+    console.error(`[RUN] QStash kick-off FAILED for ${tournamentId}: HTTP ${res.status} — ${text}`);
     return false;
   }
+  const body = await res.json().catch(() => null);
+  console.log(`[RUN] QStash kick-off OK for ${tournamentId}: messageId=${body?.messageId ?? '?'}`);
   return true;
 }
 
