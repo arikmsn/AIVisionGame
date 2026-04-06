@@ -3,7 +3,7 @@
  *
  * 12-model roster per Section 5.4 of AI Vision Arena Spec v2.
  *
- * Providers: OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter, DeepSeek
+ * Providers: OpenAI, Anthropic, Google, Groq, Mistral, xAI, OpenRouter, Together AI
  *
  * Key design decisions:
  *   • Base64 image download for providers whose servers can't reach fal.ai
@@ -24,7 +24,7 @@ import Replicate from 'replicate';
 
 export interface AgentConfig {
   modelId:       string;
-  provider:      'openai' | 'anthropic' | 'groq' | 'google' | 'replicate' | 'mistral' | 'deepseek' | 'xai' | 'openrouter';
+  provider:      'openai' | 'anthropic' | 'groq' | 'google' | 'replicate' | 'mistral' | 'xai' | 'openrouter' | 'together';
   label:         string;
   providerLabel: string;
   envKey:        string | null;
@@ -143,15 +143,15 @@ export const ARENA_AGENTS: AgentConfig[] = [
     accentColor:   '#a855f7',
     icon:          '🟣',
   },
-  // ── OpenAI mini tier ─────────────────────────────────────────────────────────
+  // ── Together AI (Moonshot AI / Kimi) ─────────────────────────────────────────
   {
-    modelId:       'gpt-4.1-mini',
-    provider:      'openai',
-    label:         'GPT-4.1 Mini',
-    providerLabel: 'OpenAI',
-    envKey:        'OPENAI_API_KEY',
-    accentColor:   '#34d399',
-    icon:          '🌿',
+    modelId:       'moonshotai/Kimi-K2.5',
+    provider:      'together',
+    label:         'Kimi K2.5',
+    providerLabel: 'Together AI',
+    envKey:        'TOGETHER_API_KEY',
+    accentColor:   '#f472b6',
+    icon:          '🌙',
   },
 ];
 
@@ -409,6 +409,23 @@ async function probeOpenRouter(modelId: string, imageUrl: string, systemPrompt: 
   return resp.choices[0]?.message?.content ?? '{}';
 }
 
+async function probeTogether(modelId: string, imageUrl: string, systemPrompt: string): Promise<string> {
+  // Together AI is OpenAI-compatible — https://api.together.xyz/v1
+  const client = new OpenAI({
+    apiKey:  process.env.TOGETHER_API_KEY,
+    baseURL: 'https://api.together.xyz/v1',
+  });
+  const resp = await client.chat.completions.create({
+    model:  modelId,
+    messages: [{ role: 'user', content: [
+      { type: 'text',      text:      systemPrompt },
+      { type: 'image_url', image_url: { url: imageUrl } },
+    ]}],
+    max_tokens: 512,
+  });
+  return resp.choices[0]?.message?.content ?? '{}';
+}
+
 /** Replicate model path mapping — owner/name + per-model schema overrides */
 const REPLICATE_MODELS: Record<string, {
   owner:          string;
@@ -416,10 +433,8 @@ const REPLICATE_MODELS: Record<string, {
   promptPrefix?:  string;   // prefix injected before the system prompt (e.g. "<image>\n")
   maxTokensKey?:  string;   // field name for max output tokens (default: "max_tokens")
 }> = {
-  'qwen2.5-vl-72b-instruct':  { owner: 'lucataco',    name: 'qwen2.5-vl-72b-instruct' },
-  'internvl3-78b':             { owner: 'cjwbw',       name: 'internvl3-78b' },
-  // DeepSeek-VL2: uses max_new_tokens + requires <image> token in the prompt
-  'deepseek-ai/deepseek-vl2': { owner: 'deepseek-ai', name: 'deepseek-vl2', promptPrefix: '<image>\n', maxTokensKey: 'max_new_tokens' },
+  'qwen2.5-vl-72b-instruct': { owner: 'lucataco', name: 'qwen2.5-vl-72b-instruct' },
+  'internvl3-78b':            { owner: 'cjwbw',    name: 'internvl3-78b' },
 };
 
 async function probeReplicate(modelId: string, imageUrl: string, systemPrompt: string): Promise<string> {
@@ -468,33 +483,6 @@ async function probeMistral(modelId: string, imageUrl: string, systemPrompt: str
   return data.choices?.[0]?.message?.content ?? '{}';
 }
 
-async function probeDeepSeek(modelId: string, imageUrl: string, systemPrompt: string): Promise<string> {
-  // DeepSeek API is OpenAI-compatible: https://api.deepseek.com
-  // DeepSeek does NOT support image_url type — must use base64 data URL
-  const { base64, mimeType } = await downloadImageBase64(imageUrl);
-  const dataUrl = `data:${mimeType};base64,${base64}`;
-
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method:  'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.DeepSeek_API_KEY}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
-      model:      modelId,
-      max_tokens: 512,
-      messages:   [{ role: 'user', content: [
-        { type: 'text',      text:      systemPrompt },
-        { type: 'image_url', image_url: { url: dataUrl } },
-      ]}],
-    }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) throw new Error(`DeepSeek API ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.choices?.[0]?.message?.content ?? '{}';
-}
-
 // ── Core dispatch (raw text response) ─────────────────────────────────────────
 
 const CALL_TIMEOUT_MS = 55_000;
@@ -532,9 +520,9 @@ async function dispatchRaw(
       case 'google':      raw = await withTimeout(probeGoogle(modelId, imageUrl, systemPrompt));      break;
       case 'replicate':   raw = await withTimeout(probeReplicate(modelId, imageUrl, systemPrompt));   break;
       case 'mistral':     raw = await withTimeout(probeMistral(modelId, imageUrl, systemPrompt));     break;
-      case 'deepseek':    raw = await withTimeout(probeDeepSeek(modelId, imageUrl, systemPrompt));    break;
       case 'xai':         raw = await withTimeout(probeXAI(modelId, imageUrl, systemPrompt));         break;
       case 'openrouter':  raw = await withTimeout(probeOpenRouter(modelId, imageUrl, systemPrompt));  break;
+      case 'together':    raw = await withTimeout(probeTogether(modelId, imageUrl, systemPrompt));    break;
       default:            throw new Error(`Unknown provider: ${agent.provider}`);
     }
     return { raw, latencyMs: Date.now() - t0, isKeyMissing: false };

@@ -88,23 +88,6 @@ async function warmupReplicate(): Promise<void> {
   if (!res.ok) throw new Error(`Replicate warmup HTTP ${res.status}`);
 }
 
-async function warmupDeepSeek(agent: AgentConfig): Promise<void> {
-  const res = await fetch('https://api.deepseek.com/chat/completions', {
-    method:  'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.DeepSeek_API_KEY}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
-      model:      'deepseek-chat',  // lightweight text model for warmup
-      max_tokens: 4,
-      messages:   [{ role: 'user', content: 'Reply with exactly: ok' }],
-    }),
-    signal: AbortSignal.timeout(WARMUP_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`DeepSeek warmup HTTP ${res.status}`);
-}
-
 async function warmupXAI(agent: AgentConfig): Promise<void> {
   // xAI is OpenAI-compatible
   const { default: OpenAI } = await import('openai');
@@ -123,6 +106,20 @@ async function warmupOpenRouter(agent: AgentConfig): Promise<void> {
     apiKey:         process.env.OPENROUTER_API_KEY,
     baseURL:        'https://openrouter.ai/api/v1',
     defaultHeaders: { 'HTTP-Referer': 'https://ai-vision-game.vercel.app' },
+  });
+  await client.chat.completions.create({
+    model:      agent.modelId,
+    messages:   [{ role: 'user', content: 'Reply with exactly: ok' }],
+    max_tokens: 4,
+  });
+}
+
+async function warmupTogether(agent: AgentConfig): Promise<void> {
+  // Together AI is OpenAI-compatible
+  const { default: OpenAI } = await import('openai');
+  const client = new OpenAI({
+    apiKey:  process.env.TOGETHER_API_KEY,
+    baseURL: 'https://api.together.xyz/v1',
   });
   await client.chat.completions.create({
     model:      agent.modelId,
@@ -165,9 +162,9 @@ function warmupByProvider(agent: AgentConfig): Promise<void> {
     case 'groq':        return warmupGroq(agent);
     case 'mistral':     return warmupMistral(agent);
     case 'replicate':   return warmupReplicate();
-    case 'deepseek':    return warmupDeepSeek(agent);
     case 'xai':         return warmupXAI(agent);
     case 'openrouter':  return warmupOpenRouter(agent);
+    case 'together':    return warmupTogether(agent);
     default:            throw new Error(`Unknown provider: ${agent.provider}`);
   }
 }
