@@ -78,13 +78,16 @@ export async function persistArenaRound(result: RoundResult): Promise<boolean> {
 
   // 1. Insert round record
   const roundOk = await insertRows('arena_rounds', [{
-    id:           result.roundId,
-    idiom_phrase: result.idiomPhrase,
-    image_url:    result.imageUrl,
-    t_start:      result.tStartIso,
-    t_end:        result.tEndIso,
-    ground_truth: result.idiomPhrase,
-    status:       'completed',
+    id:            result.roundId,
+    idiom_phrase:  result.idiomPhrase,
+    image_url:     result.imageUrl,
+    t_start:       result.tStartIso,
+    t_end:         result.tEndIso,
+    ground_truth:  result.idiomPhrase,
+    status:        'completed',
+    // Phase 2: include tournament fields when present
+    ...(result.tournamentId ? { tournament_id: result.tournamentId } : {}),
+    ...(result.roundNumber  ? { round_number:  result.roundNumber  } : {}),
   }]);
 
   if (!roundOk) {
@@ -92,15 +95,23 @@ export async function persistArenaRound(result: RoundResult): Promise<boolean> {
     return false;
   }
 
-  // 2. Insert round_players
+  // 2. Insert round_players (includes Phase 3 columns added by migration 008)
   const playerRows = result.models.map(m => ({
-    round_id:            result.roundId,
-    model_id:            m.modelId,
-    attempts_used:       m.attemptsUsed,
-    final_score:         m.finalScore,
-    reasoning_text:      m.reasoning.slice(0, 2000),
-    baseline_latency_ms: m.warmupLatencyMs,
-    warmup_ok:           m.warmupOk,
+    round_id:                result.roundId,
+    model_id:                m.modelId,
+    attempts_used:           m.attemptsUsed,
+    final_score:             m.finalScore,
+    reasoning_text:          m.reasoning.slice(0, 2000),
+    baseline_latency_ms:     m.warmupLatencyMs,
+    warmup_ok:               m.warmupOk,
+    // Phase 3 columns (migration 008)
+    dnf:                     m.dnf,
+    first_attempt_action:    m.firstAttemptAction,
+    mentions_standing:       m.mentionsStanding,
+    standing_action_rational: m.standingActionRational,
+    api_cost_usd:            m.apiCostUsd,
+    input_tokens_total:      m.inputTokensTotal,
+    output_tokens_total:     m.outputTokensTotal,
   }));
   await insertRows('arena_round_players', playerRows);
 
