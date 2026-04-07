@@ -195,7 +195,7 @@ async function runModelLoop(input: ModelLoopInput): Promise<ModelRoundResult> {
       priorGuessesVisible: 0,
       isKeyMissing:        true,
     });
-    return assemble(agent, { attemptsUsed, apiCallCount, guesses, hasCorrectGuess, totalScore, playerId, contextSentJson, inputTokensTotal, outputTokensTotal, rankAtStart }, warmupResult);
+    return assemble(agent, { attemptsUsed, apiCallCount, guesses, hasCorrectGuess, totalScore, playerId, contextSentJson, inputTokensTotal, outputTokensTotal, rankAtStart, roundNumber: tournament?.roundNumber, totalRounds: tournament?.totalRounds }, warmupResult);
   }
 
   // ── Independent query loop ──────────────────────────────────────────────────
@@ -380,6 +380,8 @@ function assemble(
     inputTokensTotal:  number;
     outputTokensTotal: number;
     rankAtStart?:      number;
+    roundNumber?:      number;
+    totalRounds?:      number;
   },
   warmupResult: WarmupResult | undefined,
 ): ModelRoundResult {
@@ -400,6 +402,8 @@ function assemble(
     guessesForMetrics,
     state.attemptsUsed,
     state.rankAtStart,
+    state.roundNumber,
+    state.totalRounds,
   );
   const apiCostUsd = estimateCostUsd(agent.modelId, state.inputTokensTotal, state.outputTokensTotal);
 

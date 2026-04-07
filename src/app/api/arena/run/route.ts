@@ -75,10 +75,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const body = await req.json().catch(() => ({})) as {
-    tournaments?:  number;
-    rounds?:       number;
-    budgetCapUsd?: number;
+    tournaments?:        number;
+    rounds?:             number;
+    budgetCapUsd?:       number;
+    /** Safety guard: must be true or the run is rejected. Prevents accidental triggers. */
+    confirm_intentional?: boolean;
   };
+
+  if (!body.confirm_intentional) {
+    return NextResponse.json(
+      { error: 'Must include confirm_intentional: true in request body to launch a run.' },
+      { status: 400 },
+    );
+  }
 
   const numTournaments = Math.min(body.tournaments ?? 2, 10);  // cap at 10 per request
   const totalRounds    = body.rounds       ?? 20;

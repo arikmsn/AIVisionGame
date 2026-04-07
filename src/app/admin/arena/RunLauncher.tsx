@@ -37,7 +37,7 @@ export function RunLauncher() {
           'Content-Type':  'application/json',
           ...(secret ? { Authorization: `Bearer ${secret}` } : {}),
         },
-        body: JSON.stringify({ tournaments, rounds, budgetCapUsd: budget }),
+        body: JSON.stringify({ tournaments, rounds, budgetCapUsd: budget, confirm_intentional: true }),
       });
 
       if (!res.ok) {

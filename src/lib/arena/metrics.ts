@@ -62,12 +62,16 @@ export interface Phase3Metrics {
  * @param attemptsUsed     Total attempts the model made
  * @param rankAtStart      Model's rank at round start (1=leader, 11=last).
  *                         Pass undefined for Phase 1 (no tournament context).
+ * @param roundNumber      Current round number (1-indexed). Used for late-game DNF detection.
+ * @param totalRounds      Total rounds in the tournament. Used for late-game DNF detection.
  */
 export function computePhase3Metrics(
   reasoning:    string,
   guesses:      GuessForMetrics[],
   attemptsUsed: number,
   rankAtStart?: number,
+  roundNumber?: number,
+  totalRounds?: number,
 ): Phase3Metrics {
 
   // ── DNF ──────────────────────────────────────────────────────────────────────
@@ -85,22 +89,36 @@ export function computePhase3Metrics(
   // ── Standing action rational ──────────────────────────────────────────────────
   let standingActionRational: boolean | null = null;
 
-  if (mentionsStanding && rankAtStart !== undefined && firstAttemptAction !== null) {
-    const inBottom3 = rankAtStart >= 9;     // ranks 9, 10, 11
-    const inTop2    = rankAtStart <= 2;
-    const guessedFirst = firstAttemptAction === 'guess';
+  if (rankAtStart !== undefined) {
+    const inBottom3  = rankAtStart >= 9;   // ranks 9, 10, 11 (of 11 players)
+    const inTop2     = rankAtStart <= 2;
 
-    if (inBottom3) {
-      // Correct strategy: rush — every second = fewer points due to decay.
-      // Waiting when last is irrational (Llama 4 Scout round 18 pattern).
-      standingActionRational = guessedFirst;
-    } else if (inTop2) {
-      // Leader can afford caution. Hard to falsify — any action could be rational.
-      // We flag irrational only if leader explicitly says "I'm comfortable" but then
-      // takes 3 wrong-guess attempts (blowing the lead). Leave as true for now.
-      standingActionRational = true;
+    // ── Case A: model took an explicit action ────────────────────────────────
+    if (mentionsStanding && firstAttemptAction !== null) {
+      const guessedFirst = firstAttemptAction === 'guess';
+      if (inBottom3) {
+        // Correct strategy: rush — every second = fewer points due to decay.
+        standingActionRational = guessedFirst;
+      } else if (inTop2) {
+        // Leader can afford caution; any action is defensible.
+        standingActionRational = true;
+      }
+      // Mid-table (3-8): strategy ambiguous. Leave null.
     }
-    // Mid-table (3-8): strategy is too ambiguous to judge. Leave null.
+
+    // ── Case B: model DNF'd while bottom-3 in the late game ─────────────────
+    // DNF (no guesses at all) when trailing badly and the tournament is nearly
+    // over is the worst possible strategic outcome — equivalent to passing when
+    // you needed a Hail Mary. Count this as irrational.
+    if (
+      dnf &&
+      inBottom3 &&
+      roundNumber !== undefined &&
+      totalRounds !== undefined &&
+      roundNumber >= Math.floor(totalRounds * 0.8)  // final 20% of rounds (rounds 16-20 for a 20-round tournament)
+    ) {
+      standingActionRational = false;
+    }
   }
 
   return { dnf, firstAttemptAction, mentionsStanding, standingActionRational };

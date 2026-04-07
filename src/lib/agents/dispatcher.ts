@@ -343,8 +343,37 @@ async function probeMistral(modelId: string, imageUrl: string, systemPrompt: str
 
 const CALL_TIMEOUT_MS = 55_000;
 
-/** Models that get one retry on any error (infrastructure-flaky providers) */
-const RETRY_PROVIDERS = new Set<AgentConfig['provider']>(['together']);
+/**
+ * True if the error is an HTTP 429 rate-limit / quota-exceeded response.
+ * All providers surface 429 as a thrown Error with the status code in the message.
+ */
+function is429(err: any): boolean {
+  const msg: string = err?.message ?? '';
+  return (
+    msg.includes('429') ||
+    msg.toLowerCase().includes('rate limit') ||
+    msg.toLowerCase().includes('rate_limit') ||
+    msg.toLowerCase().includes('quota') ||
+    msg.toLowerCase().includes('too many requests')
+  );
+}
+
+/**
+ * How long to wait before the first 429 retry, per provider (ms).
+ * Groq's on-demand TPM window is 1 minute → need a longer backoff.
+ * Google/Mistral per-minute quotas recover faster.
+ */
+const RATE_LIMIT_BACKOFF_MS: Partial<Record<AgentConfig['provider'], number>> = {
+  groq:    35_000,  // Groq on-demand TPM resets each minute
+  google:  12_000,  // Google per-minute quota; shorter window
+  mistral: 12_000,  // Mistral rate-limit window
+};
+
+/** Max 429 retries per call (second retry doubles the first delay). */
+const MAX_429_RETRIES = 2;
+
+/** Providers that get one retry on ANY error (infra-flaky providers). */
+const FLAKY_PROVIDERS = new Set<AgentConfig['provider']>(['together']);
 
 interface RawDispatchResult {
   raw:          string;
@@ -391,20 +420,52 @@ async function dispatchRaw(
   };
 
   try {
-    let providerResp: ProviderResponse;
-    try {
-      providerResp = await callProvider();
-    } catch (firstErr: any) {
-      // Phase 3 Fix B: single retry for flaky providers (Together AI / Kimi K2.5)
-      if (RETRY_PROVIDERS.has(agent.provider)) {
-        console.log(`[DISPATCHER] ${agent.label} first attempt failed (${firstErr.message}) — retrying once in 3s`);
-        await new Promise(r => setTimeout(r, 3_000));
-        providerResp = await callProvider(); // second failure propagates normally
-      } else {
-        throw firstErr;
+    let providerResp: ProviderResponse | undefined;
+    let lastErr: any;
+
+    // ── 429 retry loop (all providers) ──────────────────────────────────────
+    const baseBackoff = RATE_LIMIT_BACKOFF_MS[agent.provider] ?? 10_000;
+    for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+      try {
+        providerResp = await callProvider();
+        break; // success
+      } catch (err: any) {
+        lastErr = err;
+        const shouldRetry429 = is429(err) && attempt < MAX_429_RETRIES;
+        if (shouldRetry429) {
+          const delay = baseBackoff * (attempt + 1); // 1× then 2× the base backoff
+          console.warn(
+            `[DISPATCHER] ${agent.label} 429 rate-limit (attempt ${attempt + 1}/${MAX_429_RETRIES + 1}) — ` +
+            `retrying in ${delay / 1000}s. Error: ${err.message.slice(0, 120)}`,
+          );
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        // ── Non-429 error: flaky-provider single retry ───────────────────
+        if (!is429(err) && FLAKY_PROVIDERS.has(agent.provider) && attempt === 0) {
+          console.log(`[DISPATCHER] ${agent.label} non-429 error — flaky provider retry in 3s: ${err.message.slice(0, 80)}`);
+          await new Promise(r => setTimeout(r, 3_000));
+          try {
+            providerResp = await callProvider();
+            break;
+          } catch (retryErr: any) {
+            lastErr = retryErr;
+          }
+        }
+        break; // no more retries
       }
     }
-    return { raw: providerResp.text, latencyMs: Date.now() - t0, isKeyMissing: false, inputTokens: providerResp.inputTokens, outputTokens: providerResp.outputTokens };
+
+    if (providerResp) {
+      return {
+        raw:          providerResp.text,
+        latencyMs:    Date.now() - t0,
+        isKeyMissing: false,
+        inputTokens:  providerResp.inputTokens,
+        outputTokens: providerResp.outputTokens,
+      };
+    }
+    throw lastErr;
   } catch (err: any) {
     return { raw: '', latencyMs: Date.now() - t0, isKeyMissing: false, error: err?.message ?? 'Unknown error', inputTokens: 0, outputTokens: 0 };
   }

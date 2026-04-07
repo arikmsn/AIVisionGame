@@ -22,10 +22,33 @@ import { initTournamentState }   from '@/lib/arena/standings';
 
 // ── Internal REST helpers (same pattern as arena-results.ts) ──────────────────
 
+/**
+ * The Supabase project that the arena database lives in.
+ *
+ * The Supabase MCP in this workspace is linked to a DIFFERENT project
+ * (bgfnnahfeuyaelfbsfxx). If you use the MCP to query the DB, queries
+ * return empty results because you're hitting the wrong project.
+ *
+ * Always use this file's REST helpers (which read from SUPABASE_URL /
+ * SUPABASE_SERVICE_ROLE_KEY env vars) or curl directly against SUPABASE_URL.
+ */
+const EXPECTED_SUPABASE_PROJECT_ID = 'aciqrjgcnrxhmywlkkqb';
+
 function supabaseCreds(): { url: string; key: string } | null {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
+
+  // Hard assertion: bail with a clear error if pointed at the wrong project.
+  if (!url.includes(EXPECTED_SUPABASE_PROJECT_ID)) {
+    console.error(
+      `[TOURNAMENT/DB] FATAL: SUPABASE_URL does not contain expected project ID ` +
+      `"${EXPECTED_SUPABASE_PROJECT_ID}". Got URL: ${url.slice(0, 60)}... ` +
+      `— all DB operations will be skipped to prevent data going to the wrong project.`,
+    );
+    return null;
+  }
+
   return { url, key };
 }
 
