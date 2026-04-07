@@ -1,0 +1,202 @@
+[
+  {
+    "index": 1,
+    "phrase": "a drop in the ocean",
+    "hint": "A very small and insignificant amount compared to what is needed.",
+    "difficulty": "easy",
+    "category": "nature",
+    "visualPrompt": "A single water droplet falling dramatically from a fingertip into a vast dark ocean, the tiny splash it creates dwarfed by enormous waves stretching to the horizon, aerial perspective, golden hour lighting, photorealistic style, emphasis on the contrast between the tiny drop and the endless sea.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/rt_XxaosTRgd1UIUh6BSF.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 2,
+    "phrase": "turn over a new leaf",
+    "hint": "To make a fresh start and improve your behavior or habits.",
+    "difficulty": "medium",
+    "category": "nature",
+    "visualPrompt": "A pair of human hands gently flipping over a large green maple leaf on a forest floor covered with autumn leaves, bright morning sunlight filtering through trees above, photorealistic style, vibrant greens and earthy tones, the underside of the leaf revealed fresh and bright.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/Nlhmozjlf0-2P6wzsbAfy.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 3,
+    "phrase": "a bolt from the blue",
+    "hint": "Something completely unexpected and surprising.",
+    "difficulty": "medium",
+    "category": "weather",
+    "visualPrompt": "A bright blue lightning bolt striking down from a completely clear sunny blue sky without any clouds, hitting near a shocked and startled person on the ground. Sharp dramatic lighting, photorealistic style, no text.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/L7DtF_FRG5Wx6I2I_Wb8Y.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 4,
+    "phrase": "lightning never strikes twice",
+    "hint": "The same bad luck or misfortune is unlikely to happen to the same person again.",
+    "difficulty": "medium",
+    "category": "weather",
+    "visualPrompt": "A single charred tree in an open field being struck by a bright lightning bolt, while a second lightning bolt visibly curves away and misses the same tree. Dark storm clouds above, dramatic side lighting, photorealistic style, no text.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/YkhaTl6Qo7oJDizc2SoJ2.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 5,
+    "phrase": "flogging a dead horse",
+    "hint": "Wasting time trying to revive something that has already failed.",
+    "difficulty": "medium",
+    "category": "animals",
+    "visualPrompt": "A frustrated person swinging a stick at a cartoonish clearly lifeless toy hobby horse on the ground, the person sweating and exhausted, plain studio background, illustrated humorous style, exaggerated effort with no result.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/wvurMS9veMnZtelYRpj9O.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 6,
+    "phrase": "bark is worse than their bite",
+    "hint": "Someone who seems aggressive is actually harmless.",
+    "difficulty": "hard",
+    "category": "animals",
+    "visualPrompt": "A small fluffy dog barking aggressively with wide open mouth and bared teeth, but its tiny bite mark on a wooden post is barely a scratch while the bark shows exaggerated force, outdoor yard setting, natural daylight, photorealistic style, humorous contrast between ferocious expression and tiny ineffective teeth marks.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/xr6m12XHBaM39b17VSXP5.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 7,
+    "phrase": "shoulder the burden",
+    "hint": "To accept and carry a difficult responsibility or problem.",
+    "difficulty": "medium",
+    "category": "body",
+    "visualPrompt": "A person with a massive heavy boulder balanced and resting on their shoulder, their knees slightly bent under the weight, straining muscles visible, outdoor rocky background, dramatic side lighting casting strong shadows, photorealistic style, the weight clearly crushing down on one shoulder.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/eFsCU3s4CcQ129qIXlY6v.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 8,
+    "phrase": "keep an eye on",
+    "hint": "To watch or monitor something or someone carefully.",
+    "difficulty": "medium",
+    "category": "body",
+    "visualPrompt": "A giant disembodied human eye balanced carefully on top of a small object on a table, the eye looking alert and watchful, the pupil clearly focused downward, surreal illustrated style, clean white background, dramatic overhead lighting highlighting the eye's detail.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/ENFE_3GTC6iV3_76IlFGC.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 9,
+    "phrase": "get into the swing of things",
+    "hint": "To become comfortable and engaged with a new activity or situation.",
+    "difficulty": "medium",
+    "category": "sports",
+    "visualPrompt": "A golfer on a driving range progressively improving their golf swing, shown in mid-swing with perfect form after initial awkward attempts visible, ball flying cleanly down the fairway, relaxed and comfortable body posture, bright outdoor daylight, photorealistic style, satisfying fluid swing motion.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/npq4eGSm4oCh27RvADbvL.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 10,
+    "phrase": "go the extra mile",
+    "hint": "To make more effort than is expected of you.",
+    "difficulty": "medium",
+    "category": "sports",
+    "visualPrompt": "A runner crossing a race finish line with a crowd celebrating, but then continuing to run past everyone further down the road alone. Photorealistic wide shot, bright daylight, confetti at the finish line behind them, the runner pressing on beyond it, no text.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b03/Stld0SYd3H7vp3P18c3Xr.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 11,
+    "phrase": "pinching pennies",
+    "hint": "Being very careful and frugal with money.",
+    "difficulty": "easy",
+    "category": "money",
+    "visualPrompt": "Two fingers pressing hard on a copper penny from both sides, the penny visually deforming under extreme pressure. Multiple pennies arranged in a small careful pile nearby. Dark wooden surface, dramatic macro close-up, sharp studio lighting, photorealistic style.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/lShWPDjplaY5CLjXJrU00.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 12,
+    "phrase": "hit pay dirt",
+    "hint": "To suddenly achieve success or find something very valuable.",
+    "difficulty": "medium",
+    "category": "money",
+    "visualPrompt": "A shovel striking a patch of dark earth and sparkling gold nuggets bursting upward out of the soil on impact. Close-up ground-level shot, dirt scattering in the air. Bright sunlight, photorealistic style, rural outdoor setting with dry grass in background.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/NZA_RLSK5nO9JmbcjdPvS.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 13,
+    "phrase": "turn the tables",
+    "hint": "To reverse a situation so that the advantage shifts to the other side.",
+    "difficulty": "medium",
+    "category": "social",
+    "visualPrompt": "A person physically flipping a large dining table upside down dramatically, chairs and items flying in all directions, mid-action. Photorealistic dramatic wide shot, objects airborne, motion blur on flying items, determined expression on the table-turner, no text.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/q_EUBOdqAc6aShwpEzp3S.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 14,
+    "phrase": "add insult to injury",
+    "hint": "To make a bad situation even worse for someone.",
+    "difficulty": "medium",
+    "category": "social",
+    "visualPrompt": "A person with a bandaged injured arm being pointed at and laughed at mockingly by another person standing over them. Photorealistic mid-shot, stark indoor lighting, visible bandage and injury on the victim, cruel mocking gesture from the other person, no text.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/L0PbCIPCe-maB4ajU2O5m.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 15,
+    "phrase": "waste no time",
+    "hint": "To start doing something immediately without delay.",
+    "difficulty": "medium",
+    "category": "time",
+    "visualPrompt": "A person throwing handfuls of small hourglasses and clocks directly into an open trash bin, acting decisively and without hesitation, bright office environment, photorealistic style, overhead lighting, close foreground on hourglasses being tossed away with purposeful throwing motion.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/cETvcOHEQ3QPdbre6FLgV.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 16,
+    "phrase": "behind the times",
+    "hint": "Old-fashioned or out of date compared to modern ways.",
+    "difficulty": "medium",
+    "category": "time",
+    "visualPrompt": "A person dressed in old Victorian clothing standing behind a giant analog wall clock, modern city street visible in front of the clock, the person peeking from behind it looking confused, photorealistic style, soft natural lighting, clear contrast between antique clothing and contemporary surroundings.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/vMGLVi0j-ESa-y3Om6ly6.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 17,
+    "phrase": "sell like hotcakes",
+    "hint": "Something that is selling very quickly and in large quantities.",
+    "difficulty": "medium",
+    "category": "food",
+    "visualPrompt": "A vendor at a market stall handing out stacks of golden hotcakes to a massive crowd of eager grabbing hands, the stall nearly empty, people running toward it from all directions, warm morning light, illustrated style, busy energetic street market scene.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/5LU_Cfh-P_LOT0epVo8-k.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 18,
+    "phrase": "cherry-pick",
+    "hint": "To selectively choose only the best or most favorable options.",
+    "difficulty": "medium",
+    "category": "food",
+    "visualPrompt": "A hand carefully and deliberately selecting only the most perfect bright red cherries from a large mixed bowl of cherries of varying quality, setting the chosen perfect ones aside into a separate small bowl, close-up macro style, natural daylight, photorealistic.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/BX-eC6MSnccT-kZpSAsGY.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 19,
+    "phrase": "plug a gap",
+    "hint": "To fill in something that is missing or needed in a plan or system",
+    "difficulty": "easy",
+    "category": "tools",
+    "visualPrompt": "A hand pressing a large rubber plug firmly into a gap or hole in a wall or dam, stopping a stream of water from flowing through. Water drips fade as the plug seals it. Bright close-up foreground shot, photorealistic style, the concrete wall with the visible gap and the perfectly fitted plug clearly shown.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/XzQkaRhMLl3HEdrL52OkL.jpg",
+    "status": "ok"
+  },
+  {
+    "index": 20,
+    "phrase": "push the envelope",
+    "hint": "To go beyond normal limits and try something new or more extreme",
+    "difficulty": "medium",
+    "category": "tools",
+    "visualPrompt": "Two hands forcefully pushing a large sealed envelope forward across a table, going beyond a clearly marked boundary line. The envelope stretches and bulges from the pressure. Bright overhead office lighting, photorealistic style, the envelope and the boundary line as the central foreground focus on a clean white surface.",
+    "imageUrl": "https://v3b.fal.media/files/b/0a953b04/w9KYwTivnDIIdimiOlrRh.jpg",
+    "status": "ok"
+  }
+]
