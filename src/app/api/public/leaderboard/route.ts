@@ -48,7 +48,7 @@ export async function GET() {
       sfetch(`arena_round_players?round_id=eq.${SAMPLE_ROUND_ID}&select=model_id,dnf,attempts_used,final_score,first_attempt_action,mentions_standing,reasoning_text&order=final_score.desc`),
       sfetch('arena_tournaments?status=eq.completed&select=id,total_rounds,accumulated_cost_usd,started_at&order=started_at.asc'),
       sfetch('arena_round_players?select=round_id,model_id,final_score,dnf,attempts_used&limit=10000'),
-      sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth&order=created_at.desc&limit=60'),
+      sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth&order=t_start.desc&limit=60'),
     ]);
 
     // ── Active models (≥ 5 tournaments) ──────────────────────────────────────
