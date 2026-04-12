@@ -29,6 +29,28 @@ const MODEL_META: Record<string, { label: string; icon: string; provider: string
 
 const SAMPLE_ROUND_ID = '79bc523b-ab27-4d90-9c30-7f639c032c79';
 
+// Additional hand-picked rounds for the Round Snapshots section
+const EXTRA_SNAPSHOT_IDS = [
+  'e8b352c7-0550-4a6e-8f70-c574ade54cf8', // jump to conclusions (round 19)
+  'cf658f4c-d6cb-4076-b50a-077bb8d4efd8', // sharpen your pencil (round 18)
+  '2992cef2-c87c-4027-a1b0-e95f8094c515', // play hardball (round 18)
+] as const;
+
+const EXTRA_SNAPSHOT_META: Record<string, { caption: string; note: string }> = {
+  'e8b352c7-0550-4a6e-8f70-c574ade54cf8': {
+    caption: 'Speed is strategy',
+    note:    'Every model identified this on the first attempt. The 748-point spread between fastest (3.2s) and slowest (44s) was decided entirely by response time — not reasoning quality.',
+  },
+  'cf658f4c-d6cb-4076-b50a-077bb8d4efd8': {
+    caption: 'Overthinking loses',
+    note:    'Nine models reached for clever analogies — "get to the point", "sharpen your wits", "a sharp pencil" — and scored negative. GPT-4.1 stayed literal, answered in 4 seconds, scored 730.',
+  },
+  '2992cef2-c87c-4027-a1b0-e95f8094c515': {
+    caption: 'Sole survivor',
+    note:    'Gemini 2.5 Pro was the only model to make the correct abstraction from baseball → negotiating hard. Ten others guessed a wrong baseball idiom and went negative.',
+  },
+};
+
 function sfetch(path: string) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -44,7 +66,8 @@ function sfetch(path: string) {
 
 async function getBenchmarkData() {
   try {
-    const [statsRaw, quotesRaw, sampleRoundRaw, samplePlayersRaw, tournamentsRaw, allPlayersRaw, roundsRaw] = await Promise.all([
+    const extraIds = EXTRA_SNAPSHOT_IDS.join(',');
+    const [statsRaw, quotesRaw, sampleRoundRaw, samplePlayersRaw, tournamentsRaw, allPlayersRaw, roundsRaw, extraRoundsRaw, extraPlayersRaw] = await Promise.all([
       sfetch('v_model_career_stats?order=total_score.desc'),
       sfetch('arena_round_players?mentions_standing=eq.true&dnf=eq.false&select=model_id,final_score,reasoning_text&order=final_score.desc&limit=20'),
       sfetch(`arena_rounds?id=eq.${SAMPLE_ROUND_ID}&select=*`),
@@ -52,6 +75,8 @@ async function getBenchmarkData() {
       sfetch('arena_tournaments?status=eq.completed&select=id,total_rounds,accumulated_cost_usd,started_at&order=started_at.asc'),
       sfetch('arena_round_players?select=round_id,model_id,final_score,dnf,attempts_used&limit=10000'),
       sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth,arena_round_players(model_id,final_score,dnf)&order=t_start.desc&limit=40'),
+      sfetch(`arena_rounds?id=in.(${extraIds})&select=id,round_number,idiom_phrase,image_url,ground_truth`),
+      sfetch(`arena_round_players?round_id=in.(${extraIds})&select=model_id,round_id,final_score,dnf,attempts_used,reasoning_text&order=final_score.desc`),
     ]);
 
     const baseModels = (statsRaw as any[])
@@ -204,7 +229,33 @@ async function getBenchmarkData() {
         };
       }).filter((r: any) => r.winner_score > 0);
 
-    return { models, globalStats, liveInsights, sampleRound, quotes, gallery };
+    // ── Extra snapshots ───────────────────────────────────────────────────────
+    const extraSnapshots = EXTRA_SNAPSHOT_IDS.map(id => {
+      const roundRow = (extraRoundsRaw as any[]).find((r: any) => r.id === id);
+      if (!roundRow) return null;
+      const players = (extraPlayersRaw as any[])
+        .filter((p: any) => p.round_id === id)
+        .map((p: any) => ({
+          model_id:          p.model_id,
+          label:             MODEL_META[p.model_id]?.label ?? p.model_id,
+          icon:              MODEL_META[p.model_id]?.icon  ?? '?',
+          accent:            MODEL_META[p.model_id]?.accent ?? '#888',
+          final_score:       p.final_score as number,
+          dnf:               p.dnf as boolean,
+          reasoning_snippet: (p.reasoning_text as string | null)?.slice(0, 200) ?? '',
+        }));
+      return {
+        round_id:     roundRow.id,
+        round_number: roundRow.round_number,
+        idiom_phrase: roundRow.idiom_phrase ?? roundRow.ground_truth,
+        image_url:    roundRow.image_url as string | null,
+        caption:      EXTRA_SNAPSHOT_META[id]?.caption ?? '',
+        note:         EXTRA_SNAPSHOT_META[id]?.note ?? '',
+        players,
+      };
+    }).filter(Boolean);
+
+    return { models, globalStats, liveInsights, sampleRound, quotes, gallery, extraSnapshots };
   } catch (err) {
     console.error('[public-benchmark] data error:', err);
     return null;
@@ -266,12 +317,13 @@ Cost figures reflect standard pay-as-you-go rates at time of collection.
 export default async function PublicBenchmarkPage() {
   const data = await getBenchmarkData();
 
-  const models       = (data?.models      ?? []) as any[];
-  const globalStats  = (data?.globalStats ?? {}) as any;
-  const liveInsights = (data?.liveInsights ?? []) as any[];
-  const sampleRound  = (data?.sampleRound  ?? null) as any;
-  const quotes       = (data?.quotes       ?? []) as any[];
-  const gallery      = (data?.gallery      ?? []) as any[];
+  const models         = (data?.models         ?? [])   as any[];
+  const globalStats    = (data?.globalStats    ?? {})   as any;
+  const liveInsights   = (data?.liveInsights   ?? [])   as any[];
+  const sampleRound    = (data?.sampleRound    ?? null) as any;
+  const quotes         = (data?.quotes         ?? [])   as any[];
+  const gallery        = (data?.gallery        ?? [])   as any[];
+  const extraSnapshots = (data?.extraSnapshots ?? [])   as any[];
 
   // Merge insights: live first, then static
   const allInsights = [...liveInsights, ...STATIC_INSIGHTS];
@@ -323,7 +375,7 @@ export default async function PublicBenchmarkPage() {
           <p style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
             fontSize: '1.05rem',
-            color: '#777',
+            color: '#8a8a8a',
             lineHeight: 1.65,
             maxWidth: 560,
             margin: '0 0 32px',
@@ -488,8 +540,8 @@ export default async function PublicBenchmarkPage() {
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
                     fontSize: '0.82rem',
-                    color: '#666',
-                    lineHeight: 1.6,
+                    color: '#747474',
+                    lineHeight: 1.65,
                     margin: 0,
                   }}>
                     {ins.detail}
@@ -500,12 +552,12 @@ export default async function PublicBenchmarkPage() {
           </div>
         </section>
 
-        {/* ── 04 Round Snapshot ────────────────────────────────────────────── */}
+        {/* ── 04 Round Snapshots ───────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
           <SectionHeader
             label="04"
-            title="Round Snapshot"
-            subtitle={sampleRound ? `"${sampleRound.idiom_phrase}" · all 11 models responded` : 'Sample round'}
+            title="Round Snapshots"
+            subtitle="Four rounds that illustrate different competitive dynamics"
           />
           {sampleRound ? (
             <div style={{
@@ -629,8 +681,9 @@ export default async function PublicBenchmarkPage() {
                     <span style={{
                       fontFamily: 'var(--font-geist-sans, sans-serif)',
                       fontSize: '0.75rem',
-                      color: '#3a3a3a',
-                      lineHeight: 1.4,
+                      color: '#585858',
+                      lineHeight: 1.55,
+                      letterSpacing: '0.005em',
                     }}>
                       {p.reasoning_snippet?.slice(0, 120)}{p.reasoning_snippet?.length > 120 ? '…' : ''}
                     </span>
@@ -639,6 +692,11 @@ export default async function PublicBenchmarkPage() {
               </div>
             </div>
           ) : <Placeholder />}
+
+          {/* Extra strategic snapshots */}
+          {extraSnapshots.map((snap: any) => snap && (
+            <RoundSnapshotPanel key={snap.round_id} snapshot={snap} />
+          ))}
         </section>
 
         {/* ── 05 In Their Own Words ─────────────────────────────────────────── */}
@@ -654,8 +712,9 @@ export default async function PublicBenchmarkPage() {
                 <blockquote style={{
                   fontFamily: 'var(--font-geist-sans, sans-serif)',
                   fontSize: '0.95rem',
-                  color: '#c8c8c8',
-                  lineHeight: 1.7,
+                  color: '#d0d0d0',
+                  lineHeight: 1.75,
+                  letterSpacing: '0.005em',
                   margin: '0 0 16px',
                   fontStyle: 'italic',
                 }}>
@@ -776,6 +835,41 @@ export default async function PublicBenchmarkPage() {
           </div>
         </section>
 
+        {/* ── Contact footer ────────────────────────────────────────────────── */}
+        <div style={{
+          borderTop: '1px solid #141414',
+          padding: '28px 0 56px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+        }}>
+          <span style={{
+            fontFamily: 'var(--font-geist-sans, sans-serif)',
+            fontSize: '0.82rem',
+            color: '#444',
+          }}>
+            Questions or collaboration?
+          </span>
+          <a
+            href="https://www.linkedin.com/in/arik-morgenstern-4607128/"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontFamily: 'var(--font-geist-mono, monospace)',
+              fontSize: '0.78rem',
+              color: '#777',
+              textDecoration: 'none',
+              borderBottom: '1px solid #333',
+              paddingBottom: 1,
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#d4f25a'; (e.currentTarget as HTMLAnchorElement).style.borderBottomColor = '#d4f25a'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#777'; (e.currentTarget as HTMLAnchorElement).style.borderBottomColor = '#333'; }}
+          >
+            Contact
+          </a>
+        </div>
+
       </div>
     </main>
   );
@@ -812,6 +906,104 @@ function SectionHeader({ label, title, subtitle }: { label: string; title: strin
           {subtitle}
         </span>
       )}
+    </div>
+  );
+}
+
+function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
+  const { caption, note, idiom_phrase, image_url, round_number, players } = snapshot;
+  return (
+    <div style={{
+      border: '1px solid #1e1e1e',
+      borderRadius: 6,
+      overflow: 'hidden',
+      background: '#0c0c0c',
+      marginTop: 16,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 240px) 1fr' }}>
+        {image_url ? (
+          <div style={{ position: 'relative', aspectRatio: '1', background: '#111' }}>
+            <Image
+              src={image_url}
+              alt={`AI-generated image representing "${idiom_phrase}"`}
+              fill style={{ objectFit: 'cover' }} unoptimized
+            />
+          </div>
+        ) : (
+          <div style={{ background: '#111', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2a2a2a', fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem' }}>
+            no image
+          </div>
+        )}
+        <div style={{ padding: '24px 28px', borderLeft: '1px solid #1a1a1a' }}>
+          <div style={{
+            fontFamily: 'var(--font-geist-mono, monospace)',
+            fontSize: '0.62rem', color: '#d4f25a', opacity: 0.8,
+            letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 6,
+          }}>
+            {caption}
+          </div>
+          <h3 style={{
+            fontFamily: 'var(--font-geist-sans, sans-serif)',
+            fontSize: 'clamp(1.1rem, 2vw, 1.5rem)',
+            fontWeight: 700, color: '#f0f0f0',
+            margin: '0 0 12px', letterSpacing: '-0.02em',
+          }}>
+            &ldquo;{idiom_phrase}&rdquo;
+          </h3>
+          <p style={{
+            fontFamily: 'var(--font-geist-sans, sans-serif)',
+            fontSize: '0.82rem', color: '#666',
+            lineHeight: 1.6, margin: '0 0 8px',
+          }}>
+            {note}
+          </p>
+          {round_number && (
+            <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#2a2a2a', marginTop: 8 }}>
+              Round {round_number}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Player finish list */}
+      <div style={{ borderTop: '1px solid #1a1a1a', padding: '14px 0' }}>
+        <div style={{
+          padding: '0 24px 10px',
+          fontFamily: 'var(--font-geist-mono, monospace)',
+          fontSize: '0.62rem', color: '#3a3a3a',
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}>
+          Finish order — score ↓
+        </div>
+        {(players as any[]).map((p: any, i: number) => (
+          <div key={p.model_id} style={{
+            display: 'grid',
+            gridTemplateColumns: '28px 170px 70px 1fr',
+            gap: 0, padding: '8px 24px',
+            borderTop: i === 0 ? 'none' : '1px solid #141414',
+            alignItems: 'start',
+          }}>
+            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.72rem', color: i === 0 ? '#d4f25a' : '#333', paddingTop: 2 }}>
+              {i + 1}
+            </span>
+            <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.83rem', fontWeight: 600, color: '#c8c8c8', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: p.accent, flexShrink: 0 }} />
+              {p.label}
+            </span>
+            <span style={{
+              fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.83rem', fontWeight: 600,
+              color: p.dnf ? '#2a2a2a' : (i === 0 ? '#d4f25a' : (p.final_score < 0 ? '#f87171aa' : '#606060')),
+              paddingTop: 1,
+            }}>
+              {p.dnf ? 'DNF' : p.final_score.toLocaleString()}
+            </span>
+            <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.74rem', color: '#585858', lineHeight: 1.5, letterSpacing: '0.005em' }}>
+              {p.reasoning_snippet?.slice(0, 100)}{p.reasoning_snippet?.length > 100 ? '…' : ''}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
