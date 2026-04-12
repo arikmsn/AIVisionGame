@@ -309,33 +309,56 @@ export default async function PublicBenchmarkPage() {
   const allInsights = [...liveInsights, ...STATIC_INSIGHTS];
 
   return (
-    <main style={{ background: '#0a0a0a', minHeight: '100vh', color: '#e8e8e8' }}>
+    <main style={{ background: '#070707', minHeight: '100vh', color: '#c0c0c0' }}>
       <style>{`
-        .bm-c { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+        /* ── Layout ───────────────────────────────────────────── */
+        .bm-c { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+
+        /* Stats: always 4-col → 2-col on small */
         .bm-stats { display: grid; grid-template-columns: repeat(4, 1fr); }
-        .bm-insights { display: grid; grid-template-columns: repeat(3, 1fr); }
-        .bm-meth { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
-        .bm-sample-hdr { display: grid; grid-template-columns: minmax(200px, 320px) 1fr; }
-        .bm-snap-hdr { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; }
-        .bm-pl-row { display: grid; grid-template-columns: 28px 180px 70px 1fr; }
-        .bm-snap-pl { display: grid; grid-template-columns: 28px 170px 70px 1fr; }
+
+        /* Live findings: fixed 3-col — never has orphans (always exactly 3 items) */
+        .bm-live-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; }
+
+        /* Static insights: 2-col — last item spans full when orphaned */
+        .bm-static-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; }
+        .bm-static-grid > *:last-child:nth-child(2n+1) { grid-column: 1 / -1; }
+
+        /* Methodology strip */
+        .bm-meth-strip { display: flex; flex-wrap: wrap; }
+        .bm-meth-item { flex: 1; min-width: 170px; padding: 20px 22px; border-right: 1px solid #1a1a1a; }
+        .bm-meth-item:last-child { border-right: none; }
+
+        /* Panel headers */
+        .bm-sample-hdr { display: grid; grid-template-columns: minmax(200px, 300px) 1fr; }
+        .bm-snap-hdr   { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; }
+        .bm-pl-row     { display: grid; grid-template-columns: 28px 180px 70px 1fr; }
+        .bm-snap-pl    { display: grid; grid-template-columns: 28px 170px 70px 1fr; }
+
+        /* ── Responsive ───────────────────────────────────────── */
         @media (max-width: 900px) {
-          .bm-insights { grid-template-columns: repeat(2, 1fr); }
-          .bm-meth { grid-template-columns: repeat(2, 1fr); }
+          /* Live grid → 2-col. 3 items: last one (odd pos) spans full */
+          .bm-live-grid { grid-template-columns: repeat(2, 1fr); }
+          .bm-live-grid > *:last-child:nth-child(2n+1) { grid-column: 1 / -1; }
         }
         @media (max-width: 640px) {
-          .bm-c { padding: 0 16px; }
+          .bm-c { padding: 0 18px; }
           .bm-stats { grid-template-columns: repeat(2, 1fr); }
-          .bm-insights { grid-template-columns: 1fr; }
-          .bm-meth { grid-template-columns: 1fr; }
+          .bm-live-grid   { grid-template-columns: 1fr; }
+          .bm-static-grid { grid-template-columns: 1fr; }
+          .bm-live-grid > *:last-child:nth-child(2n+1),
+          .bm-static-grid > *:last-child:nth-child(2n+1) { grid-column: 1; }
           .bm-sample-hdr { grid-template-columns: 1fr; }
-          .bm-snap-hdr { grid-template-columns: 1fr; }
-          .bm-pl-row { grid-template-columns: 28px 1fr 62px; }
+          .bm-snap-hdr   { grid-template-columns: 1fr; }
+          .bm-pl-row  { grid-template-columns: 28px 1fr 62px; }
           .bm-snap-pl { grid-template-columns: 28px 1fr 62px; }
           .bm-pl-reason { display: none; }
+          .bm-meth-item { min-width: 140px; padding: 16px 18px; }
         }
         @media (max-width: 480px) {
-          .bm-c { padding: 0 14px; }
+          .bm-c { padding: 0 16px; }
+          .bm-meth-item { flex: none; width: 100%; border-right: none; border-bottom: 1px solid #1a1a1a; }
+          .bm-meth-item:last-child { border-bottom: none; }
         }
       `}</style>
       <div className="bm-c">
@@ -345,37 +368,37 @@ export default async function PublicBenchmarkPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '20px 0',
-          borderBottom: '1px solid #1a1a1a',
-          marginBottom: 64,
+          padding: '22px 0',
+          borderBottom: '1px solid #1d1d1d',
+          marginBottom: 72,
         }}>
           <span style={{
             fontFamily: 'var(--font-geist-mono, monospace)',
-            fontSize: '0.8rem',
-            color: '#555',
-            letterSpacing: '0.08em',
+            fontSize: '0.78rem',
+            color: '#666',
+            letterSpacing: '0.1em',
           }}>
             AI VISION BENCHMARK
           </span>
           <span style={{
             fontFamily: 'var(--font-geist-mono, monospace)',
-            fontSize: '0.72rem',
-            color: '#333',
+            fontSize: '0.7rem',
+            color: '#353535',
           }}>
             read-only · public
           </span>
         </nav>
 
         {/* ── Hero ─────────────────────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
+        <section style={{ marginBottom: 88 }}>
           <h1 style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
-            fontSize: 'clamp(2.2rem, 5vw, 3.8rem)',
-            fontWeight: 700,
-            lineHeight: 1.08,
-            letterSpacing: '-0.03em',
-            color: '#f0f0f0',
-            margin: '0 0 20px',
+            fontSize: 'clamp(2.4rem, 5vw, 4rem)',
+            fontWeight: 800,
+            lineHeight: 1.06,
+            letterSpacing: '-0.04em',
+            color: '#f2f2f2',
+            margin: '0 0 22px',
           }}>
             11 vision-language models.<br />
             One benchmark.
@@ -383,10 +406,10 @@ export default async function PublicBenchmarkPage() {
           <p style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
             fontSize: '1.05rem',
-            color: '#999',
-            lineHeight: 1.65,
-            maxWidth: 560,
-            margin: '0 0 32px',
+            color: '#b0b0b0',
+            lineHeight: 1.7,
+            maxWidth: 540,
+            margin: '0 0 28px',
           }}>
             Each model competes in real-time tournaments — identifying idioms from AI-generated
             literal images, watching opponents&apos; guesses, and deciding when to commit.
@@ -395,8 +418,8 @@ export default async function PublicBenchmarkPage() {
           {globalStats.date_from && (
             <p style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
-              fontSize: '0.75rem',
-              color: '#3a3a3a',
+              fontSize: '0.73rem',
+              color: '#444',
             }}>
               {globalStats.date_from} – {globalStats.date_to} ·{' '}
               {globalStats.total_tournaments} tournaments ·{' '}
@@ -408,11 +431,11 @@ export default async function PublicBenchmarkPage() {
         {/* ── Stats row ────────────────────────────────────────────────────── */}
         <section className="bm-stats" style={{
           gap: 1,
-          background: '#1a1a1a',
-          border: '1px solid #1a1a1a',
+          background: '#1d1d1d',
+          border: '1px solid #1d1d1d',
           borderRadius: 6,
           overflow: 'hidden',
-          marginBottom: 56,
+          marginBottom: 64,
         }}>
           {[
             { label: 'Tournaments',     value: globalStats.total_tournaments?.toLocaleString() ?? '—' },
@@ -421,24 +444,24 @@ export default async function PublicBenchmarkPage() {
             { label: 'First-try Solve', value: globalStats.first_try_pct != null ? `${globalStats.first_try_pct}%` : '—' },
           ].map(stat => (
             <div key={stat.label} style={{
-              background: '#0a0a0a',
-              padding: '28px 24px',
+              background: '#0e0e0e',
+              padding: '28px 26px',
             }}>
               <div style={{
                 fontFamily: 'var(--font-geist-mono, monospace)',
-                fontSize: 'clamp(1.6rem, 3vw, 2.2rem)',
+                fontSize: 'clamp(1.7rem, 3vw, 2.4rem)',
                 fontWeight: 700,
                 color: '#d4f25a',
                 lineHeight: 1,
-                marginBottom: 8,
+                marginBottom: 10,
               }}>
                 {stat.value}
               </div>
               <div style={{
                 fontFamily: 'var(--font-geist-sans, sans-serif)',
-                fontSize: '0.75rem',
-                color: '#555',
-                letterSpacing: '0.06em',
+                fontSize: '0.72rem',
+                color: '#666',
+                letterSpacing: '0.07em',
                 textTransform: 'uppercase',
               }}>
                 {stat.label}
@@ -447,42 +470,32 @@ export default async function PublicBenchmarkPage() {
           ))}
         </section>
 
-        {/* ── How this arena works (Methodology) ──────────────────────────── */}
-        <section style={{ marginBottom: 64 }}>
-          <div style={{
-            border: '1px solid #1a1a1a',
-            borderRadius: 6,
-            overflow: 'hidden',
-            background: '#0b0b0b',
-          }}>
-            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #161616' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.62rem', color: '#2e2e2e', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                  How this arena works
-                </span>
-                <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.78rem', color: '#555', lineHeight: 1.5 }}>
-                  11 models · same image · real-time competition · score decays with time
-                </span>
-              </div>
+        {/* ── How this benchmark works ─────────────────────────────────────── */}
+        <section style={{ marginBottom: 72 }}>
+          <div style={{ border: '1px solid #1d1d1d', borderRadius: 6, overflow: 'hidden', background: '#0e0e0e' }}>
+            <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.62rem', color: '#d4f25a', opacity: 0.65, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
+                How this benchmark works
+              </span>
+              <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.8rem', color: '#616161' }}>
+                11 models · same image · simultaneous start · exponential score decay
+              </span>
             </div>
-            <div className="bm-meth" style={{
-              background: '#1a1a1a',
-              gap: 1,
-            }}>
-              {[
-                ['Each round', 'All 11 models receive the same AI-generated image and must identify the depicted idiom. They submit structured JSON: an action, a phrase guess, and free-form reasoning.'],
-                ['Scoring', 'First correct guess earns ~800 pts. Score decays exponentially over time. Each wrong guess incurs a −50 penalty. DNF (all 3 attempts failed) = 0 pts.'],
-                ['3 attempts max', 'Models may guess or wait on each turn. Waiting is legal but historically correlates with lower accuracy, not higher.'],
-                ['Simultaneous + transparent', 'All models start at the same moment. Each can see opponent guesses and live standings — enabling game-theoretic adaptation.'],
-                ['20 rounds / tournament', 'Tournaments run end-to-end with no human intervention. API calls hit production endpoints at standard pay-as-you-go rates.'],
-                ['3 tracked dimensions', 'Visual reasoning (accuracy, score), strategic behavior (standing awareness, attempt discipline), and infrastructure reliability (DNF rate).'],
-              ].map(([label, text]) => (
-                <div key={label as string} style={{ background: '#0b0b0b', padding: '16px 20px' }}>
-                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.63rem', color: '#d4f25a', opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+            <div className="bm-meth-strip" style={{ background: '#0e0e0e' }}>
+              {([
+                ['Rounds / tournament', '20'],
+                ['Models per round',    '11'],
+                ['Max attempts',        '3'],
+                ['Scoring',             '~800 → 0, time-decay'],
+                ['Wrong guess',         '−50 pts penalty'],
+                ['Standings visibility','Live to all models'],
+              ] as [string, string][]).map(([label, val]) => (
+                <div key={label} className="bm-meth-item">
+                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem', color: '#444', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 7 }}>
                     {label}
                   </div>
-                  <div style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.8rem', color: '#888', lineHeight: 1.6 }}>
-                    {text}
+                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.88rem', fontWeight: 600, color: '#c0c0c0' }}>
+                    {val}
                   </div>
                 </div>
               ))}
@@ -491,21 +504,21 @@ export default async function PublicBenchmarkPage() {
         </section>
 
         {/* ── 01 Leaderboard ───────────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
+        <section style={{ marginBottom: 96 }}>
           <SectionHeader label="01" title="Leaderboard" subtitle="All 11 active models · sortable by any column" />
 
           {/* How to read this table */}
           <div style={{
-            background: '#0c0c0c',
-            borderLeft: '2px solid #1e1e1e',
+            background: '#0d0d0d',
+            borderLeft: '2px solid #252525',
             padding: '16px 20px',
             marginBottom: 20,
             borderRadius: '0 4px 4px 0',
           }}>
             <div style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
-              fontSize: '0.62rem',
-              color: '#333',
+              fontSize: '0.6rem',
+              color: '#3a3a3a',
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
               marginBottom: 10,
@@ -514,18 +527,18 @@ export default async function PublicBenchmarkPage() {
             </div>
             <ul style={{
               fontFamily: 'var(--font-geist-sans, sans-serif)',
-              fontSize: '0.78rem',
-              color: '#888',
-              lineHeight: 1.6,
+              fontSize: '0.8rem',
+              color: '#9a9a9a',
+              lineHeight: 1.65,
               margin: 0,
               padding: '0 0 0 16px',
               display: 'flex',
               flexDirection: 'column',
               gap: 5,
             }}>
-              <li>Avg Score is the primary metric. It measures mean points per round, accounting for submission speed via score decay.</li>
-              <li>Accuracy counts correct identifications — but a slow correct guess scores far less than a fast one. Top models win with speed, not just accuracy.</li>
-              <li>DNF% = rounds where all 3 attempts failed or the API errored. Infrastructure failures, not reasoning failures.</li>
+              <li><strong style={{ color: '#c8c8c8', fontWeight: 600 }}>Avg Score</strong> is the primary metric — mean points per round, weighted by submission speed.</li>
+              <li>A slow correct guess scores far less than a fast one. Top models win with speed, not just accuracy.</li>
+              <li><strong style={{ color: '#c8c8c8', fontWeight: 600 }}>DNF%</strong> = rounds where all 3 attempts failed or the API errored (infrastructure failure, not reasoning).</li>
             </ul>
           </div>
 
@@ -536,7 +549,7 @@ export default async function PublicBenchmarkPage() {
         </section>
 
         {/* ── 02 Round Gallery ─────────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
+        <section style={{ marginBottom: 96 }}>
           <SectionHeader label="02" title="Round Gallery" subtitle="Recent rounds · click any card for full detail" />
           {gallery.length > 0
             ? <RoundGallery rounds={gallery} />
@@ -545,62 +558,46 @@ export default async function PublicBenchmarkPage() {
         </section>
 
         {/* ── 03 Findings ──────────────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
-          <SectionHeader label="03" title="Findings" subtitle="3 live from current data · 5 editorial" />
-          <div className="bm-insights" style={{
-            gap: 1,
-            background: '#1a1a1a',
-            border: '1px solid #1a1a1a',
-            borderRadius: 6,
-            overflow: 'hidden',
-          }}>
-            {allInsights.map((ins: any, i: number) => {
-              const isLive = i < liveInsights.length;
-              return (
-                <div key={ins.id} style={{
-                  background: '#0c0c0c',
-                  padding: '24px',
-                  borderLeft: isLive ? '2px solid #d4f25a' : '2px solid #1e1e1e',
-                }}>
-                  {isLive && (
-                    <div style={{
-                      fontFamily: 'var(--font-geist-mono, monospace)',
-                      fontSize: '0.65rem',
-                      color: '#d4f25a',
-                      letterSpacing: '0.1em',
-                      textTransform: 'uppercase',
-                      marginBottom: 6,
-                    }}>
-                      live · {ins.value}
-                    </div>
-                  )}
-                  <h3 style={{
-                    fontFamily: 'var(--font-geist-sans, sans-serif)',
-                    fontSize: '0.9rem',
-                    fontWeight: 600,
-                    color: '#e0e0e0',
-                    margin: '0 0 10px',
-                    lineHeight: 1.3,
-                  }}>
-                    {ins.headline}
-                  </h3>
-                  <p style={{
-                    fontFamily: 'var(--font-geist-sans, sans-serif)',
-                    fontSize: '0.82rem',
-                    color: '#888',
-                    lineHeight: 1.65,
-                    margin: 0,
-                  }}>
-                    {ins.detail}
-                  </p>
+        <section style={{ marginBottom: 96 }}>
+          <SectionHeader label="03" title="Findings" subtitle="3 computed from live data · 5 editorial" />
+
+          {/* Live findings — always exactly 3 items, 3-col fixed, zero orphan risk */}
+          <div className="bm-live-grid" style={{ background: '#1d1d1d', borderRadius: '6px 6px 0 0', overflow: 'hidden' }}>
+            {liveInsights.map((ins: any) => (
+              <div key={ins.id} style={{ background: '#0e0e0e', padding: '26px 24px', borderLeft: '2px solid #d4f25a' }}>
+                <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.62rem', color: '#d4f25a', opacity: 0.85, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  live · {ins.value}
                 </div>
-              );
-            })}
+                <h3 style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.92rem', fontWeight: 700, color: '#e8e8e8', margin: '0 0 10px', lineHeight: 1.3 }}>
+                  {ins.headline}
+                </h3>
+                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#989898', lineHeight: 1.68, margin: 0 }}>
+                  {ins.detail}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {/* Editorial insights — 5 items, 2-col grid, CSS guarantees last item spans full width */}
+          <div className="bm-static-grid" style={{ background: '#1a1a1a', borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'hidden' }}>
+            {STATIC_INSIGHTS.map((ins, i) => (
+              <div key={ins.id} style={{ background: '#090909', padding: '22px 24px', borderLeft: '2px solid #1e1e1e' }}>
+                <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#3a3a3a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+                  {String(i + 1).padStart(2, '0')}
+                </div>
+                <h3 style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.9rem', fontWeight: 600, color: '#d8d8d8', margin: '0 0 10px', lineHeight: 1.35 }}>
+                  {ins.headline}
+                </h3>
+                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#8a8a8a', lineHeight: 1.68, margin: 0 }}>
+                  {ins.detail}
+                </p>
+              </div>
+            ))}
           </div>
         </section>
 
         {/* ── 04 Round Snapshots ───────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
+        <section style={{ marginBottom: 96 }}>
           <SectionHeader
             label="04"
             title="Round Snapshots"
@@ -624,11 +621,11 @@ export default async function PublicBenchmarkPage() {
                     unoptimized
                   />
                 </div>
-                <div style={{ padding: '28px 32px', borderLeft: '1px solid #1a1a1a' }}>
+                <div style={{ padding: '28px 32px', borderLeft: '1px solid #1d1d1d' }}>
                   <div style={{
                     fontFamily: 'var(--font-geist-mono, monospace)',
-                    fontSize: '0.65rem',
-                    color: '#444',
+                    fontSize: '0.62rem',
+                    color: '#3a3a3a',
                     letterSpacing: '0.1em',
                     textTransform: 'uppercase',
                     marginBottom: 12,
@@ -640,7 +637,7 @@ export default async function PublicBenchmarkPage() {
                     fontSize: 'clamp(1.3rem, 2.5vw, 1.9rem)',
                     fontWeight: 700,
                     color: '#f0f0f0',
-                    margin: '0 0 20px',
+                    margin: '0 0 18px',
                     letterSpacing: '-0.02em',
                   }}>
                     &ldquo;{sampleRound.idiom_phrase}&rdquo;
@@ -648,8 +645,8 @@ export default async function PublicBenchmarkPage() {
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
                     fontSize: '0.82rem',
-                    color: '#888',
-                    lineHeight: 1.6,
+                    color: '#9a9a9a',
+                    lineHeight: 1.65,
                     margin: 0,
                   }}>
                     All 11 models identified this idiom correctly on the first attempt.
@@ -741,13 +738,13 @@ export default async function PublicBenchmarkPage() {
         </section>
 
         {/* ── 05 In Their Own Words ─────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
+        <section style={{ marginBottom: 96 }}>
           <SectionHeader label="05" title="In Their Own Words" subtitle="Strategic reasoning from the highest-scoring rounds" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: '#1a1a1a', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: '#1d1d1d', borderRadius: 6, overflow: 'hidden' }}>
             {quotes.map((q: any) => (
               <div key={`${q.model_id}-${q.final_score}`} style={{
-                background: '#0c0c0c',
-                padding: '28px 28px 28px 32px',
+                background: '#0d0d0d',
+                padding: '28px 28px 28px 30px',
                 borderLeft: `3px solid ${q.accent}`,
               }}>
                 <blockquote style={{
@@ -764,15 +761,15 @@ export default async function PublicBenchmarkPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
-                    fontSize: '0.8rem',
-                    color: '#666',
+                    fontSize: '0.82rem',
+                    color: '#787878',
                   }}>
                     {q.icon} {q.label}
                   </span>
                   <span style={{
                     fontFamily: 'var(--font-geist-mono, monospace)',
                     fontSize: '0.72rem',
-                    color: '#333',
+                    color: '#2e2e2e',
                   }}>
                     ·
                   </span>
@@ -873,32 +870,39 @@ export default async function PublicBenchmarkPage() {
 
 function SectionHeader({ label, title, subtitle }: { label: string; title: string; subtitle?: string }) {
   return (
-    <div style={{ marginBottom: 24, display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap' }}>
-      <span style={{
-        fontFamily: 'var(--font-geist-mono, monospace)',
-        fontSize: '0.7rem',
-        color: '#333',
-      }}>
-        {label}
-      </span>
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <span style={{
+          fontFamily: 'var(--font-geist-mono, monospace)',
+          fontSize: '0.62rem',
+          color: '#2e2e2e',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          flexShrink: 0,
+        }}>
+          {label}
+        </span>
+        <div style={{ flex: 1, height: 1, background: '#1a1a1a' }} />
+      </div>
       <h2 style={{
         fontFamily: 'var(--font-geist-sans, sans-serif)',
-        fontSize: '1.25rem',
-        fontWeight: 600,
+        fontSize: '1.35rem',
+        fontWeight: 700,
         color: '#e8e8e8',
-        margin: 0,
-        letterSpacing: '-0.01em',
+        margin: subtitle ? '0 0 6px' : 0,
+        letterSpacing: '-0.02em',
       }}>
         {title}
       </h2>
       {subtitle && (
-        <span style={{
+        <p style={{
           fontFamily: 'var(--font-geist-sans, sans-serif)',
-          fontSize: '0.8rem',
-          color: '#444',
+          fontSize: '0.82rem',
+          color: '#666',
+          margin: 0,
         }}>
           {subtitle}
-        </span>
+        </p>
       )}
     </div>
   );
@@ -908,10 +912,10 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
   const { caption, note, idiom_phrase, image_url, round_number, players } = snapshot;
   return (
     <div style={{
-      border: '1px solid #1e1e1e',
+      border: '1px solid #1d1d1d',
       borderRadius: 6,
       overflow: 'hidden',
-      background: '#0c0c0c',
+      background: '#0e0e0e',
       marginTop: 16,
     }}>
       {/* Header */}
@@ -929,7 +933,7 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
             no image
           </div>
         )}
-        <div style={{ padding: '24px 28px', borderLeft: '1px solid #1a1a1a' }}>
+        <div style={{ padding: '24px 28px', borderLeft: '1px solid #1d1d1d' }}>
           <div style={{
             fontFamily: 'var(--font-geist-mono, monospace)',
             fontSize: '0.62rem', color: '#d4f25a', opacity: 0.8,

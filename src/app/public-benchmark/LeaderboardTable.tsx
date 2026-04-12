@@ -287,10 +287,10 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
         fontSize: '0.82rem',
       }}>
         <thead>
-          <tr style={{ borderBottom: '1px solid #2a2a2a' }}>
-            <th style={{ ...thBase, textAlign: 'left', width: 32, color: '#333' }}>#</th>
-            <th style={{ ...thBase, textAlign: 'left', minWidth: 180 }}>Model</th>
-            <th style={{ ...thBase, textAlign: 'left', minWidth: 80, color: '#444', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem' }}>Provider</th>
+          <tr style={{ borderBottom: '1px solid #222' }}>
+            <th style={{ ...thBase, textAlign: 'left', width: 32, color: '#2e2e2e' }}>#</th>
+            <th style={{ ...thBase, textAlign: 'left', minWidth: 190, color: '#888' }}>Model</th>
+            <th style={{ ...thBase, textAlign: 'left', minWidth: 80, color: '#3a3a3a', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>Provider</th>
             {PRIMARY_COLS.map(col => (
               <th
                 key={col.key}
@@ -332,30 +332,32 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
         <tbody>
           {sorted.map((m, i) => {
             const barWidth = Math.max(2, Math.round((Math.max(0, m.avg_round_score) / Math.max(1, rank1Score)) * 100));
+            // Top 3 colored left rail — creates immediate visual hierarchy at a glance
+            const rankRail = i === 0 ? '#d4f25a' : i === 1 ? '#555' : i === 2 ? '#303030' : 'transparent';
             return (
               <tr
                 key={m.model_id}
-                style={{ borderBottom: '1px solid #141414', transition: 'background 0.1s' }}
+                style={{ borderBottom: '1px solid #171717', borderLeft: `2px solid ${rankRail}`, transition: 'background 0.1s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#111')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
                 {/* Rank */}
-                <td style={{ ...tdBase, color: '#333', paddingRight: 8 }}>{i + 1}</td>
+                <td style={{ ...tdBase, color: i === 0 ? '#d4f25a' : '#383838', paddingRight: 8, fontWeight: i === 0 ? 700 : 400 }}>{i + 1}</td>
 
                 {/* Model name + bar */}
                 <td style={{ ...tdBase, textAlign: 'left' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ color: '#ebebeb', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span style={{ color: i === 0 ? '#f2f2f2' : '#d8d8d8', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.86rem', fontWeight: 700 }}>
                       {m.icon} {m.label}
                     </span>
-                    <div style={{ height: 2, width: '100%', background: '#1e1e1e', borderRadius: 1, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${barWidth}%`, background: m.accent, opacity: 0.7 }} />
+                    <div style={{ height: 2, width: '100%', background: '#1a1a1a', borderRadius: 1, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${barWidth}%`, background: m.accent, opacity: i === 0 ? 0.85 : 0.55 }} />
                     </div>
                   </div>
                 </td>
 
                 {/* Provider */}
-                <td style={{ ...tdBase, textAlign: 'left', color: '#505050', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem' }}>
+                <td style={{ ...tdBase, textAlign: 'left', color: '#484848', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>
                   {m.provider}
                 </td>
 
@@ -368,9 +370,10 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                   return (
                     <td key={col.key} style={{
                       ...tdBase,
-                      color,
-                      fontWeight: isPrimary ? 600 : (isActive ? 600 : 400),
-                      background: isActive ? 'rgba(212,242,90,0.03)' : 'transparent',
+                      color: isPrimary && i === 0 ? '#d4f25a' : color,
+                      fontSize: isPrimary ? '0.96rem' : '0.82rem',
+                      fontWeight: isPrimary ? 700 : (isActive ? 600 : 400),
+                      background: isActive ? 'rgba(212,242,90,0.025)' : 'transparent',
                     }}>
                       {fmt(val, col.key)}
                     </td>
@@ -378,7 +381,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 })}
 
                 {/* Dim separator */}
-                <td style={{ background: '#111', padding: 0 }} />
+                <td style={{ background: '#0e0e0e', padding: 0 }} />
 
                 {/* Dim columns */}
                 {DIM_COLS.map(col => {
@@ -387,10 +390,10 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                   return (
                     <td key={col.key} style={{
                       ...tdBase,
-                      color: isActive ? colColor(val, col.key, false) : '#3a3a3a',
+                      color: isActive ? colColor(val, col.key, false) : '#353535',
                       fontWeight: isActive ? 600 : 400,
-                      background: isActive ? 'rgba(212,242,90,0.03)' : 'transparent',
-                      opacity: isActive ? 1 : 0.7,
+                      background: isActive ? 'rgba(212,242,90,0.025)' : 'transparent',
+                      opacity: isActive ? 1 : 0.8,
                     }}>
                       {fmt(val, col.key)}
                     </td>
@@ -426,16 +429,16 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
 }
 
 const thBase: React.CSSProperties = {
-  padding: '10px 14px',
+  padding: '11px 14px',
   textAlign: 'right',
-  fontWeight: 500,
-  fontSize: '0.72rem',
-  letterSpacing: '0.04em',
+  fontWeight: 600,
+  fontSize: '0.7rem',
+  letterSpacing: '0.05em',
   textTransform: 'uppercase',
 };
 
 const tdBase: React.CSSProperties = {
-  padding: '11px 14px',
+  padding: '12px 14px',
   textAlign: 'right',
   verticalAlign: 'middle',
 };
