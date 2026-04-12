@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 type SortKey =
   | 'avg_round_score'
@@ -77,9 +77,6 @@ const DIM_COLS: { key: SortKey; label: string; title: string }[] = [
   },
 ];
 
-const ALL_COLS = [...PRIMARY_COLS, ...DIM_COLS];
-void ALL_COLS;
-
 function fmt(val: number | null | undefined, key: SortKey): string {
   if (val == null) return '—';
   if (key === 'total_score')      return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -120,9 +117,22 @@ function colColor(val: number | null, key: SortKey, isDimCol: boolean): string {
   return '#ebebeb';
 }
 
+function useWindowWidth() {
+  const [w, setW] = useState(1200);
+  useEffect(() => {
+    setW(window.innerWidth);
+    const h = () => setW(window.innerWidth);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return w;
+}
+
 export function LeaderboardTable({ models }: { models: ModelRow[] }) {
   const [sortKey, setSortKey]   = useState<SortKey>('avg_round_score');
   const [sortDesc, setSortDesc] = useState(true);
+  const width = useWindowWidth();
+  const isMobile = width < 700;
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) { setSortDesc(d => !d); }
@@ -137,6 +147,137 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
 
   const rank1Score = sorted[0]?.avg_round_score ?? 1;
 
+  if (isMobile) {
+    return (
+      <div>
+        {/* Mobile sort strip */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 10,
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.63rem', color: '#3a3a3a', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+            Sort:
+          </span>
+          {PRIMARY_COLS.map(col => (
+            <button
+              key={col.key}
+              onClick={() => toggleSort(col.key)}
+              style={{
+                background: 'none',
+                border: sortKey === col.key ? '1px solid #d4f25a55' : '1px solid #222',
+                borderRadius: 3,
+                padding: '3px 9px',
+                cursor: 'pointer',
+                fontFamily: 'var(--font-geist-mono, monospace)',
+                fontSize: '0.63rem',
+                color: sortKey === col.key ? '#d4f25a' : '#444',
+                letterSpacing: '0.02em',
+              }}
+            >
+              {col.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Mobile cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {sorted.map((m, i) => {
+            const barWidth = Math.max(2, Math.round((Math.max(0, m.avg_round_score) / Math.max(1, rank1Score)) * 100));
+            return (
+              <div key={m.model_id} style={{
+                background: '#0c0c0c',
+                border: '1px solid #181818',
+                borderRadius: 4,
+                padding: '14px 16px',
+              }}>
+                {/* Row 1: rank + model name + primary score */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <span style={{
+                    fontFamily: 'var(--font-geist-mono, monospace)',
+                    fontSize: '0.7rem',
+                    color: i === 0 ? '#d4f25a' : '#333',
+                    minWidth: 18,
+                    flexShrink: 0,
+                  }}>
+                    {i + 1}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontFamily: 'var(--font-geist-sans, sans-serif)',
+                      fontSize: '0.88rem',
+                      fontWeight: 600,
+                      color: '#e8e8e8',
+                      marginBottom: 5,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {m.icon} {m.label}
+                    </div>
+                    {/* Score bar */}
+                    <div style={{ height: 2, background: '#1e1e1e', borderRadius: 1, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${barWidth}%`, background: m.accent, opacity: 0.7 }} />
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{
+                      fontFamily: 'var(--font-geist-mono, monospace)',
+                      fontSize: '1.05rem',
+                      fontWeight: 700,
+                      color: colColor(m.avg_round_score, 'avg_round_score', false),
+                    }}>
+                      {fmt(m.avg_round_score, 'avg_round_score')}
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#333', marginTop: 2 }}>
+                      avg/round
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 2: secondary metrics */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(4, 1fr)',
+                  gap: 0,
+                  borderTop: '1px solid #141414',
+                  paddingTop: 10,
+                }}>
+                  {[
+                    { label: 'Accuracy', val: fmt(m.correct_pct, 'correct_pct'), color: colColor(m.correct_pct, 'correct_pct', false) },
+                    { label: 'DNF%',     val: fmt(m.dnf_pct, 'dnf_pct'),         color: colColor(m.dnf_pct, 'dnf_pct', false) },
+                    { label: 'Wins',     val: fmt(m.wins, 'wins'),               color: '#888' },
+                    { label: 'Tries',    val: fmt(m.avg_attempts, 'avg_attempts'), color: colColor(m.avg_attempts, 'avg_attempts', false) },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} style={{ textAlign: 'center' }}>
+                      <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.78rem', fontWeight: 600, color }}>{val}</div>
+                      <div style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.6rem', color: '#3a3a3a', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Legend */}
+        <div style={{
+          display: 'flex', gap: 16, marginTop: 12, paddingTop: 12,
+          borderTop: '1px solid #1e1e1e',
+          fontFamily: 'var(--font-geist-sans, sans-serif)',
+          fontSize: '0.7rem', color: '#444', flexWrap: 'wrap',
+        }}>
+          <span><span style={{ color: '#4ade80' }}>■</span> Accuracy ≥60%</span>
+          <span><span style={{ color: '#d4f25a' }}>■</span> Accuracy 40–60%</span>
+          <span><span style={{ color: '#f87171' }}>■</span> DNF &gt;30%</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop table ─────────────────────────────────────────────────────────
   return (
     <div style={{ overflowX: 'auto', width: '100%' }}>
       <table style={{
@@ -204,7 +345,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 {/* Model name + bar */}
                 <td style={{ ...tdBase, textAlign: 'left' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    <span style={{ color: '#ebebeb', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.85rem', fontWeight: 500 }}>
+                    <span style={{ color: '#ebebeb', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.85rem', fontWeight: 600 }}>
                       {m.icon} {m.label}
                     </span>
                     <div style={{ height: 2, width: '100%', background: '#1e1e1e', borderRadius: 1, overflow: 'hidden' }}>
@@ -214,7 +355,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 </td>
 
                 {/* Provider */}
-                <td style={{ ...tdBase, textAlign: 'left', color: '#444', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem' }}>
+                <td style={{ ...tdBase, textAlign: 'left', color: '#505050', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem' }}>
                   {m.provider}
                 </td>
 

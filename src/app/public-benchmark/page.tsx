@@ -292,26 +292,6 @@ const STATIC_INSIGHTS = [
   },
 ];
 
-// ── Methodology text ─────────────────────────────────────────────────────────
-
-const METHODOLOGY = `
-Each tournament runs 11 vision-language models through 20 rounds of an idiom identification task.
-In each round, all models receive the same AI-generated image depicting a common English idiom literally.
-Models submit structured JSON responses with an action (guess or wait), a phrase guess, a confidence score, and free-form reasoning.
-They can see each other's public guesses and current standings in real time.
-
-Scoring follows an exponential time-decay curve: first-attempt correct guesses score highest,
-with deductions for each subsequent attempt and for elapsed time within the round.
-Wrong guesses incur a penalty; rounds where all attempts fail or error are marked DNF.
-
-The benchmark tracks three categories: visual reasoning performance (accuracy, score),
-strategic behavior (standing awareness, attempt patterns, rationality of standing-based decisions),
-and infrastructure reliability (DNF rates, provider error types).
-
-All API calls are made against production endpoints with no special pricing or throttling.
-Cost figures reflect standard pay-as-you-go rates at time of collection.
-`.trim();
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function PublicBenchmarkPage() {
@@ -330,7 +310,35 @@ export default async function PublicBenchmarkPage() {
 
   return (
     <main style={{ background: '#0a0a0a', minHeight: '100vh', color: '#e8e8e8' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px' }}>
+      <style>{`
+        .bm-c { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+        .bm-stats { display: grid; grid-template-columns: repeat(4, 1fr); }
+        .bm-insights { display: grid; grid-template-columns: repeat(3, 1fr); }
+        .bm-meth { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
+        .bm-sample-hdr { display: grid; grid-template-columns: minmax(200px, 320px) 1fr; }
+        .bm-snap-hdr { display: grid; grid-template-columns: minmax(160px, 240px) 1fr; }
+        .bm-pl-row { display: grid; grid-template-columns: 28px 180px 70px 1fr; }
+        .bm-snap-pl { display: grid; grid-template-columns: 28px 170px 70px 1fr; }
+        @media (max-width: 900px) {
+          .bm-insights { grid-template-columns: repeat(2, 1fr); }
+          .bm-meth { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 640px) {
+          .bm-c { padding: 0 16px; }
+          .bm-stats { grid-template-columns: repeat(2, 1fr); }
+          .bm-insights { grid-template-columns: 1fr; }
+          .bm-meth { grid-template-columns: 1fr; }
+          .bm-sample-hdr { grid-template-columns: 1fr; }
+          .bm-snap-hdr { grid-template-columns: 1fr; }
+          .bm-pl-row { grid-template-columns: 28px 1fr 62px; }
+          .bm-snap-pl { grid-template-columns: 28px 1fr 62px; }
+          .bm-pl-reason { display: none; }
+        }
+        @media (max-width: 480px) {
+          .bm-c { padding: 0 14px; }
+        }
+      `}</style>
+      <div className="bm-c">
 
         {/* ── Nav ─────────────────────────────────────────────────────────── */}
         <nav style={{
@@ -375,7 +383,7 @@ export default async function PublicBenchmarkPage() {
           <p style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
             fontSize: '1.05rem',
-            color: '#8a8a8a',
+            color: '#999',
             lineHeight: 1.65,
             maxWidth: 560,
             margin: '0 0 32px',
@@ -398,15 +406,13 @@ export default async function PublicBenchmarkPage() {
         </section>
 
         {/* ── Stats row ────────────────────────────────────────────────────── */}
-        <section style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+        <section className="bm-stats" style={{
           gap: 1,
           background: '#1a1a1a',
           border: '1px solid #1a1a1a',
           borderRadius: 6,
           overflow: 'hidden',
-          marginBottom: 72,
+          marginBottom: 56,
         }}>
           {[
             { label: 'Tournaments',     value: globalStats.total_tournaments?.toLocaleString() ?? '—' },
@@ -441,6 +447,49 @@ export default async function PublicBenchmarkPage() {
           ))}
         </section>
 
+        {/* ── How this arena works (Methodology) ──────────────────────────── */}
+        <section style={{ marginBottom: 64 }}>
+          <div style={{
+            border: '1px solid #1a1a1a',
+            borderRadius: 6,
+            overflow: 'hidden',
+            background: '#0b0b0b',
+          }}>
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #161616' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.62rem', color: '#2e2e2e', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  How this arena works
+                </span>
+                <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.78rem', color: '#555', lineHeight: 1.5 }}>
+                  11 models · same image · real-time competition · score decays with time
+                </span>
+              </div>
+            </div>
+            <div className="bm-meth" style={{
+              background: '#1a1a1a',
+              gap: 1,
+            }}>
+              {[
+                ['Each round', 'All 11 models receive the same AI-generated image and must identify the depicted idiom. They submit structured JSON: an action, a phrase guess, and free-form reasoning.'],
+                ['Scoring', 'First correct guess earns ~800 pts. Score decays exponentially over time. Each wrong guess incurs a −50 penalty. DNF (all 3 attempts failed) = 0 pts.'],
+                ['3 attempts max', 'Models may guess or wait on each turn. Waiting is legal but historically correlates with lower accuracy, not higher.'],
+                ['Simultaneous + transparent', 'All models start at the same moment. Each can see opponent guesses and live standings — enabling game-theoretic adaptation.'],
+                ['20 rounds / tournament', 'Tournaments run end-to-end with no human intervention. API calls hit production endpoints at standard pay-as-you-go rates.'],
+                ['3 tracked dimensions', 'Visual reasoning (accuracy, score), strategic behavior (standing awareness, attempt discipline), and infrastructure reliability (DNF rate).'],
+              ].map(([label, text]) => (
+                <div key={label as string} style={{ background: '#0b0b0b', padding: '16px 20px' }}>
+                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.63rem', color: '#d4f25a', opacity: 0.7, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+                    {label}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.8rem', color: '#888', lineHeight: 1.6 }}>
+                    {text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* ── 01 Leaderboard ───────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
           <SectionHeader label="01" title="Leaderboard" subtitle="All 11 active models · sortable by any column" />
@@ -466,7 +515,7 @@ export default async function PublicBenchmarkPage() {
             <ul style={{
               fontFamily: 'var(--font-geist-sans, sans-serif)',
               fontSize: '0.78rem',
-              color: '#555',
+              color: '#888',
               lineHeight: 1.6,
               margin: 0,
               padding: '0 0 0 16px',
@@ -498,9 +547,7 @@ export default async function PublicBenchmarkPage() {
         {/* ── 03 Findings ──────────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
           <SectionHeader label="03" title="Findings" subtitle="3 live from current data · 5 editorial" />
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          <div className="bm-insights" style={{
             gap: 1,
             background: '#1a1a1a',
             border: '1px solid #1a1a1a',
@@ -540,7 +587,7 @@ export default async function PublicBenchmarkPage() {
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
                     fontSize: '0.82rem',
-                    color: '#747474',
+                    color: '#888',
                     lineHeight: 1.65,
                     margin: 0,
                   }}>
@@ -567,11 +614,7 @@ export default async function PublicBenchmarkPage() {
               background: '#0c0c0c',
             }}>
               {/* Image + idiom header */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(200px, 320px) 1fr',
-                gap: 0,
-              }}>
+              <div className="bm-sample-hdr" style={{ gap: 0 }}>
                 <div style={{ position: 'relative', aspectRatio: '1', background: '#111' }}>
                   <Image
                     src={sampleRound.image_url}
@@ -605,7 +648,7 @@ export default async function PublicBenchmarkPage() {
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
                     fontSize: '0.82rem',
-                    color: '#555',
+                    color: '#888',
                     lineHeight: 1.6,
                     margin: 0,
                   }}>
@@ -636,9 +679,7 @@ export default async function PublicBenchmarkPage() {
                   Finish order — score ↓
                 </div>
                 {sampleRound.players.map((p: any, i: number) => (
-                  <div key={p.model_id} style={{
-                    display: 'grid',
-                    gridTemplateColumns: '28px 180px 70px 1fr',
+                  <div key={p.model_id} className="bm-pl-row" style={{
                     gap: 0,
                     padding: '10px 24px',
                     borderTop: i === 0 ? 'none' : '1px solid #141414',
@@ -678,10 +719,10 @@ export default async function PublicBenchmarkPage() {
                     }}>
                       {p.final_score.toLocaleString()}
                     </span>
-                    <span style={{
+                    <span className="bm-pl-reason" style={{
                       fontFamily: 'var(--font-geist-sans, sans-serif)',
                       fontSize: '0.75rem',
-                      color: '#585858',
+                      color: '#7a7a7a',
                       lineHeight: 1.55,
                       letterSpacing: '0.005em',
                     }}>
@@ -712,7 +753,7 @@ export default async function PublicBenchmarkPage() {
                 <blockquote style={{
                   fontFamily: 'var(--font-geist-sans, sans-serif)',
                   fontSize: '0.95rem',
-                  color: '#d0d0d0',
+                  color: '#d8d8d8',
                   lineHeight: 1.75,
                   letterSpacing: '0.005em',
                   margin: '0 0 16px',
@@ -748,50 +789,6 @@ export default async function PublicBenchmarkPage() {
           </div>
         </section>
 
-        {/* ── 06 Methodology ───────────────────────────────────────────────── */}
-        <section style={{ marginBottom: 72 }}>
-          <SectionHeader label="06" title="Methodology" />
-          <div style={{
-            border: '1px solid #1a1a1a',
-            borderRadius: 6,
-            padding: '28px 32px',
-            background: '#0c0c0c',
-          }}>
-            {METHODOLOGY.split('\n\n').map((para, i) => (
-              <p key={i} style={{
-                fontFamily: 'var(--font-geist-sans, sans-serif)',
-                fontSize: '0.85rem',
-                color: '#666',
-                lineHeight: 1.75,
-                margin: i === 0 ? 0 : '14px 0 0',
-              }}>
-                {para}
-              </p>
-            ))}
-            <div style={{
-              display: 'flex',
-              gap: 24,
-              flexWrap: 'wrap',
-              marginTop: 24,
-              paddingTop: 20,
-              borderTop: '1px solid #1a1a1a',
-            }}>
-              {[
-                ['Image generation', 'fal.ai flux/schnell'],
-                ['Scoring', 'Exponential time-decay, −50 per wrong guess'],
-                ['Rounds per tournament', '20'],
-                ['Models per round', '11'],
-                ['Max attempts per round', '3'],
-              ].map(([label, val]) => (
-                <div key={label}>
-                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#3a3a3a', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
-                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.8rem', color: '#777' }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* ── What's Next ──────────────────────────────────────────────────── */}
         <section style={{
           borderTop: '1px solid #1a1a1a',
@@ -816,7 +813,7 @@ export default async function PublicBenchmarkPage() {
             <p style={{
               fontFamily: 'var(--font-geist-sans, sans-serif)',
               fontSize: '0.88rem',
-              color: '#555',
+              color: '#888',
               maxWidth: 520,
               lineHeight: 1.6,
               margin: 0,
@@ -918,7 +915,7 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
       marginTop: 16,
     }}>
       {/* Header */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 240px) 1fr' }}>
+      <div className="bm-snap-hdr">
         {image_url ? (
           <div style={{ position: 'relative', aspectRatio: '1', background: '#111' }}>
             <Image
@@ -950,7 +947,7 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
           </h3>
           <p style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
-            fontSize: '0.82rem', color: '#666',
+            fontSize: '0.82rem', color: '#888',
             lineHeight: 1.6, margin: '0 0 8px',
           }}>
             {note}
@@ -974,9 +971,7 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
           Finish order — score ↓
         </div>
         {(players as any[]).map((p: any, i: number) => (
-          <div key={p.model_id} style={{
-            display: 'grid',
-            gridTemplateColumns: '28px 170px 70px 1fr',
+          <div key={p.model_id} className="bm-snap-pl" style={{
             gap: 0, padding: '8px 24px',
             borderTop: i === 0 ? 'none' : '1px solid #141414',
             alignItems: 'start',
@@ -995,7 +990,7 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
             }}>
               {p.dnf ? 'DNF' : p.final_score.toLocaleString()}
             </span>
-            <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.74rem', color: '#585858', lineHeight: 1.5, letterSpacing: '0.005em' }}>
+            <span className="bm-pl-reason" style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.74rem', color: '#7a7a7a', lineHeight: 1.5, letterSpacing: '0.005em' }}>
               {p.reasoning_snippet?.slice(0, 100)}{p.reasoning_snippet?.length > 100 ? '…' : ''}
             </span>
           </div>
