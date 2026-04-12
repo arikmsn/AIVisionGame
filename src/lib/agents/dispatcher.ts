@@ -33,7 +33,7 @@ export const ARENA_AGENTS: AgentConfig[] = [
   { modelId: 'claude-sonnet-4-6',                         provider: 'anthropic', label: 'Claude Sonnet 4.6', providerLabel: 'Anthropic',  envKey: 'ANTHROPIC_API_KEY',            accentColor: '#fbbf24', icon: '🟡' },
   { modelId: 'gpt-4.1',                                   provider: 'openai',    label: 'GPT-4.1',           providerLabel: 'OpenAI',     envKey: 'OPENAI_API_KEY',               accentColor: '#10a37f', icon: '🟢' },
   { modelId: 'grok-4.20-0309-non-reasoning',              provider: 'xai',       label: 'Grok 4.20',         providerLabel: 'xAI',        envKey: 'XAI_API_KEY',                  accentColor: '#ef4444', icon: '🔴' },
-  { modelId: 'meta-llama/llama-4-scout-17b-16e-instruct', provider: 'groq',      label: 'Llama 4 Scout',     providerLabel: 'Groq',       envKey: 'GROQ_API_KEY',                 accentColor: '#f59e0b', icon: '⚡' },
+  { modelId: 'meta-llama/llama-4-scout-17b-16e-instruct', provider: 'openrouter',label: 'Llama 4 Scout',     providerLabel: 'OpenRouter', envKey: 'OPENROUTER_API_KEY',           accentColor: '#f59e0b', icon: '⚡' },
   { modelId: 'mistral-large-latest',                      provider: 'mistral',   label: 'Mistral Large',     providerLabel: 'Mistral',    envKey: 'MISTRAL_API_KEY',              accentColor: '#06b6d4', icon: '🌊' },
   { modelId: 'pixtral-large-latest',                      provider: 'mistral',   label: 'Pixtral Large',     providerLabel: 'Mistral',    envKey: 'MISTRAL_API_KEY',              accentColor: '#0ea5e9', icon: '🧊' },
   { modelId: 'qwen/qwen2.5-vl-72b-instruct',              provider: 'openrouter',label: 'Qwen 2.5-VL 72B',   providerLabel: 'OpenRouter',  envKey: 'OPENROUTER_API_KEY',           accentColor: '#8b5cf6', icon: '🔮' },
