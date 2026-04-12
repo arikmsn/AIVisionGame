@@ -7,6 +7,7 @@
 
 import Image from 'next/image';
 import { LeaderboardTable } from './LeaderboardTable';
+import { RoundGallery } from './RoundGallery';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,17 +44,59 @@ function sfetch(path: string) {
 
 async function getBenchmarkData() {
   try {
-    const [statsRaw, quotesRaw, sampleRoundRaw, samplePlayersRaw, tournamentsRaw] = await Promise.all([
+    const [statsRaw, quotesRaw, sampleRoundRaw, samplePlayersRaw, tournamentsRaw, allPlayersRaw, roundsRaw] = await Promise.all([
       sfetch('v_model_career_stats?order=total_score.desc'),
       sfetch('arena_round_players?mentions_standing=eq.true&dnf=eq.false&select=model_id,final_score,reasoning_text&order=final_score.desc&limit=20'),
       sfetch(`arena_rounds?id=eq.${SAMPLE_ROUND_ID}&select=*`),
       sfetch(`arena_round_players?round_id=eq.${SAMPLE_ROUND_ID}&select=model_id,dnf,attempts_used,final_score,first_attempt_action,mentions_standing,reasoning_text&order=final_score.desc`),
       sfetch('arena_tournaments?status=eq.completed&select=id,total_rounds,accumulated_cost_usd,started_at&order=started_at.asc'),
+      sfetch('arena_round_players?select=round_id,model_id,final_score,dnf,attempts_used&limit=10000'),
+      sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth&order=created_at.desc&limit=60'),
     ]);
 
-    const models = (statsRaw as any[])
-      .filter(m => (m.tournaments_played ?? 0) >= 5 && MODEL_META[m.model_id])
-      .map(m => ({ ...m, ...MODEL_META[m.model_id] }));
+    const baseModels = (statsRaw as any[])
+      .filter(m => (m.tournaments_played ?? 0) >= 5 && MODEL_META[m.model_id]);
+
+    // ── Wins + avg_attempts from allPlayersRaw ────────────────────────────────
+    const allPlayers = allPlayersRaw as any[];
+    // Group by round
+    const byRound = new Map<string, any[]>();
+    for (const p of allPlayers) {
+      if (!byRound.has(p.round_id)) byRound.set(p.round_id, []);
+      byRound.get(p.round_id)!.push(p);
+    }
+    // Count wins per model
+    const winsMap = new Map<string, number>();
+    for (const roundPlayers of byRound.values()) {
+      const nonDnf = roundPlayers.filter(p => !p.dnf && (p.final_score ?? 0) > 0);
+      if (nonDnf.length === 0) continue;
+      const maxScore = Math.max(...nonDnf.map((p: any) => p.final_score));
+      const winner = nonDnf.find((p: any) => p.final_score === maxScore);
+      if (winner) winsMap.set(winner.model_id, (winsMap.get(winner.model_id) ?? 0) + 1);
+    }
+    // Avg attempts per model
+    const attemptsMap = new Map<string, { sum: number; count: number }>();
+    for (const p of allPlayers) {
+      if (!attemptsMap.has(p.model_id)) attemptsMap.set(p.model_id, { sum: 0, count: 0 });
+      const entry = attemptsMap.get(p.model_id)!;
+      entry.sum   += (p.attempts_used ?? 0);
+      entry.count += 1;
+    }
+
+    const models = baseModels.map(m => ({
+      ...m,
+      ...MODEL_META[m.model_id],
+      wins:         winsMap.get(m.model_id) ?? 0,
+      avg_attempts: attemptsMap.has(m.model_id)
+        ? Math.round(attemptsMap.get(m.model_id)!.sum / attemptsMap.get(m.model_id)!.count * 10) / 10
+        : null,
+    }));
+
+    // ── Global first_try_pct ──────────────────────────────────────────────────
+    const firstTryCount = allPlayers.filter(p => !p.dnf && (p.attempts_used ?? 0) === 1).length;
+    const first_try_pct = allPlayers.length > 0
+      ? Math.round(firstTryCount / allPlayers.length * 100)
+      : null;
 
     const opus   = models.find(m => m.model_id === 'claude-opus-4-6');
     const gpt    = models.find(m => m.model_id === 'gpt-4.1');
@@ -63,8 +106,8 @@ async function getBenchmarkData() {
     const positiveModels = models.filter(m => m.avg_round_score > 0);
     const fieldAvg = positiveModels.reduce((s, m) => s + m.avg_round_score, 0) / (positiveModels.length || 1);
     const highDnfModels = models.filter(m => m.dnf_pct > 20);
-    const totalDNFrounds = models.reduce((s, m) => s + Math.round((m.total_rounds ?? 0) * (m.dnf_pct ?? 0) / 100), 0);
-    const concentratedDNFs = highDnfModels.reduce((s, m) => s + Math.round((m.total_rounds ?? 0) * (m.dnf_pct ?? 0) / 100), 0);
+    const totalDNFrounds = models.reduce((s: number, m: any) => s + Math.round((m.total_rounds ?? 0) * (m.dnf_pct ?? 0) / 100), 0);
+    const concentratedDNFs = highDnfModels.reduce((s: number, m: any) => s + Math.round((m.total_rounds ?? 0) * (m.dnf_pct ?? 0) / 100), 0);
     const costRatio = opus && gpt ? Math.round(opus.total_cost_usd / gpt.total_cost_usd) : 12;
     const scoreRatio = opus && gpt ? Math.round(gpt.total_score / opus.total_score * 100) : 95;
 
@@ -85,7 +128,7 @@ async function getBenchmarkData() {
         id:       'dnf-concentration',
         headline: `${highDnfModels.length} models account for ${Math.round(concentratedDNFs / Math.max(totalDNFrounds, 1) * 100)}% of all failed rounds`,
         value:    `${Math.round(concentratedDNFs / Math.max(totalDNFrounds, 1) * 100)}%`,
-        detail:   `${highDnfModels.map(m => m.label).join(' and ')} carry DNF rates of ${highDnfModels.map(m => m.dnf_pct.toFixed(0) + '%').join(' and ')}. The remaining ${models.length - highDnfModels.length} active models have a combined DNF rate under 5% — infrastructure failures, not visual reasoning failures.`,
+        detail:   `${highDnfModels.map((m: any) => m.label).join(' and ')} carry DNF rates of ${highDnfModels.map((m: any) => m.dnf_pct.toFixed(0) + '%').join(' and ')}. The remaining ${models.length - highDnfModels.length} active models have a combined DNF rate under 5% — infrastructure failures, not visual reasoning failures.`,
       },
     ];
 
@@ -96,9 +139,10 @@ async function getBenchmarkData() {
     const globalStats = {
       total_tournaments:  tournaments.length,
       total_rounds:       totalRounds,
-      total_model_rounds: models.reduce((s, m) => s + (m.total_rounds ?? 0), 0),
+      total_model_rounds: models.reduce((s: number, m: any) => s + (m.total_rounds ?? 0), 0),
       total_cost_usd:     Math.round(totalCost * 100) / 100,
       active_models:      models.length,
+      first_try_pct,
       date_from:          tournaments[0]?.started_at?.slice(0, 10) ?? '',
       date_to:            tournaments[tournaments.length - 1]?.started_at?.slice(0, 10) ?? '',
     };
@@ -140,7 +184,28 @@ async function getBenchmarkData() {
         reasoning_text: q.reasoning_text as string,
       }));
 
-    return { models, globalStats, liveInsights, sampleRound, quotes };
+    // ── Gallery rounds ────────────────────────────────────────────────────────
+    const gallery = (roundsRaw as any[])
+      .filter(r => byRound.has(r.id))
+      .slice(0, 40)
+      .map(r => {
+        const rp = (byRound.get(r.id) ?? []).sort((a: any, b: any) => (b.final_score ?? 0) - (a.final_score ?? 0));
+        const winner = rp[0];
+        const scores = rp.filter((p: any) => !p.dnf).map((p: any) => p.final_score as number);
+        return {
+          round_id:      r.id,
+          idiom_phrase:  r.idiom_phrase ?? r.ground_truth ?? '?',
+          image_url:     r.image_url as string | null,
+          winner_label:  MODEL_META[winner?.model_id]?.label ?? winner?.model_id ?? '?',
+          winner_icon:   MODEL_META[winner?.model_id]?.icon  ?? '?',
+          winner_score:  winner?.final_score ?? 0,
+          score_min:     scores.length ? Math.min(...scores) : 0,
+          score_max:     scores.length ? Math.max(...scores) : 0,
+          correct_count: rp.filter((p: any) => !p.dnf && (p.final_score ?? 0) > 0).length,
+        };
+      });
+
+    return { models, globalStats, liveInsights, sampleRound, quotes, gallery };
   } catch (err) {
     console.error('[public-benchmark] data error:', err);
     return null;
@@ -207,6 +272,7 @@ export default async function PublicBenchmarkPage() {
   const liveInsights = (data?.liveInsights ?? []) as any[];
   const sampleRound  = (data?.sampleRound  ?? null) as any;
   const quotes       = (data?.quotes       ?? []) as any[];
+  const gallery      = (data?.gallery      ?? []) as any[];
 
   // Merge insights: live first, then static
   const allInsights = [...liveInsights, ...STATIC_INSIGHTS];
@@ -264,7 +330,7 @@ export default async function PublicBenchmarkPage() {
             margin: '0 0 32px',
           }}>
             Each model competes in real-time tournaments — identifying idioms from AI-generated
-            literal images, watching opponents' guesses, and deciding when to commit.
+            literal images, watching opponents&apos; guesses, and deciding when to commit.
             Scores decay with time. Strategy matters.
           </p>
           {globalStats.date_from && (
@@ -292,10 +358,10 @@ export default async function PublicBenchmarkPage() {
           marginBottom: 72,
         }}>
           {[
-            { label: 'Tournaments',   value: globalStats.total_tournaments?.toLocaleString() ?? '—' },
-            { label: 'Rounds',        value: globalStats.total_rounds?.toLocaleString() ?? '—' },
-            { label: 'Model-Rounds',  value: globalStats.total_model_rounds?.toLocaleString() ?? '—' },
-            { label: 'API Spend',     value: globalStats.total_cost_usd != null ? `$${globalStats.total_cost_usd.toFixed(2)}` : '—' },
+            { label: 'Tournaments',     value: globalStats.total_tournaments?.toLocaleString() ?? '—' },
+            { label: 'Rounds',          value: globalStats.total_rounds?.toLocaleString() ?? '—' },
+            { label: 'Model-Rounds',    value: globalStats.total_model_rounds?.toLocaleString() ?? '—' },
+            { label: 'First-try Solve', value: globalStats.first_try_pct != null ? `${globalStats.first_try_pct}%` : '—' },
           ].map(stat => (
             <div key={stat.label} style={{
               background: '#0a0a0a',
@@ -324,18 +390,63 @@ export default async function PublicBenchmarkPage() {
           ))}
         </section>
 
-        {/* ── Leaderboard ──────────────────────────────────────────────────── */}
+        {/* ── 01 Leaderboard ───────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
           <SectionHeader label="01" title="Leaderboard" subtitle="All 11 active models · sortable by any column" />
+
+          {/* How to read this table */}
+          <div style={{
+            background: '#0c0c0c',
+            borderLeft: '2px solid #1e1e1e',
+            padding: '16px 20px',
+            marginBottom: 20,
+            borderRadius: '0 4px 4px 0',
+          }}>
+            <div style={{
+              fontFamily: 'var(--font-geist-mono, monospace)',
+              fontSize: '0.62rem',
+              color: '#333',
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              marginBottom: 10,
+            }}>
+              How to read this table
+            </div>
+            <ul style={{
+              fontFamily: 'var(--font-geist-sans, sans-serif)',
+              fontSize: '0.78rem',
+              color: '#555',
+              lineHeight: 1.6,
+              margin: 0,
+              padding: '0 0 0 16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 5,
+            }}>
+              <li>Avg Score is the primary metric. It measures mean points per round, accounting for submission speed via score decay.</li>
+              <li>Accuracy counts correct identifications — but a slow correct guess scores far less than a fast one. Top models win with speed, not just accuracy.</li>
+              <li>DNF% = rounds where all 3 attempts failed or the API errored. Infrastructure failures, not reasoning failures.</li>
+            </ul>
+          </div>
+
           {models.length > 0
             ? <LeaderboardTable models={models} />
             : <Placeholder />
           }
         </section>
 
-        {/* ── Insights ─────────────────────────────────────────────────────── */}
+        {/* ── 02 Round Gallery ─────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
-          <SectionHeader label="02" title="Findings" subtitle="3 live from current data · 5 editorial" />
+          <SectionHeader label="02" title="Round Gallery" subtitle="Recent rounds · click any card for full detail" />
+          {gallery.length > 0
+            ? <RoundGallery rounds={gallery} />
+            : <Placeholder />
+          }
+        </section>
+
+        {/* ── 03 Findings ──────────────────────────────────────────────────── */}
+        <section style={{ marginBottom: 72 }}>
+          <SectionHeader label="03" title="Findings" subtitle="3 live from current data · 5 editorial" />
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -390,10 +501,10 @@ export default async function PublicBenchmarkPage() {
           </div>
         </section>
 
-        {/* ── Sample Round ─────────────────────────────────────────────────── */}
+        {/* ── 04 Round Snapshot ────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
           <SectionHeader
-            label="03"
+            label="04"
             title="Round Snapshot"
             subtitle={sampleRound ? `"${sampleRound.idiom_phrase}" · all 11 models responded` : 'Sample round'}
           />
@@ -438,7 +549,7 @@ export default async function PublicBenchmarkPage() {
                     margin: '0 0 20px',
                     letterSpacing: '-0.02em',
                   }}>
-                    "{sampleRound.idiom_phrase}"
+                    &ldquo;{sampleRound.idiom_phrase}&rdquo;
                   </h3>
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
@@ -531,9 +642,9 @@ export default async function PublicBenchmarkPage() {
           ) : <Placeholder />}
         </section>
 
-        {/* ── Reasoning Quotes ─────────────────────────────────────────────── */}
+        {/* ── 05 In Their Own Words ─────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
-          <SectionHeader label="04" title="In Their Own Words" subtitle="Strategic reasoning from the highest-scoring rounds" />
+          <SectionHeader label="05" title="In Their Own Words" subtitle="Strategic reasoning from the highest-scoring rounds" />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: '#1a1a1a', borderRadius: 6, overflow: 'hidden' }}>
             {quotes.map((q: any) => (
               <div key={`${q.model_id}-${q.final_score}`} style={{
@@ -549,7 +660,7 @@ export default async function PublicBenchmarkPage() {
                   margin: '0 0 16px',
                   fontStyle: 'italic',
                 }}>
-                  "{q.reasoning_text}"
+                  &ldquo;{q.reasoning_text}&rdquo;
                 </blockquote>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{
@@ -579,9 +690,9 @@ export default async function PublicBenchmarkPage() {
           </div>
         </section>
 
-        {/* ── Methodology ──────────────────────────────────────────────────── */}
+        {/* ── 06 Methodology ───────────────────────────────────────────────── */}
         <section style={{ marginBottom: 72 }}>
-          <SectionHeader label="05" title="Methodology" />
+          <SectionHeader label="06" title="Methodology" />
           <div style={{
             border: '1px solid #1a1a1a',
             borderRadius: 6,
@@ -642,7 +753,7 @@ export default async function PublicBenchmarkPage() {
               textTransform: 'uppercase',
               marginBottom: 10,
             }}>
-              What's next
+              What&apos;s next
             </div>
             <p style={{
               fontFamily: 'var(--font-geist-sans, sans-serif)',
