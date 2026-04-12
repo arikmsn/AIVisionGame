@@ -51,7 +51,7 @@ async function getBenchmarkData() {
       sfetch(`arena_round_players?round_id=eq.${SAMPLE_ROUND_ID}&select=model_id,dnf,attempts_used,final_score,first_attempt_action,mentions_standing,reasoning_text&order=final_score.desc`),
       sfetch('arena_tournaments?status=eq.completed&select=id,total_rounds,accumulated_cost_usd,started_at&order=started_at.asc'),
       sfetch('arena_round_players?select=round_id,model_id,final_score,dnf,attempts_used&limit=10000'),
-      sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth&order=t_start.desc&limit=60'),
+      sfetch('arena_rounds?select=id,round_number,idiom_phrase,image_url,ground_truth,arena_round_players(model_id,final_score,dnf)&order=t_start.desc&limit=40'),
     ]);
 
     const baseModels = (statsRaw as any[])
@@ -184,14 +184,13 @@ async function getBenchmarkData() {
         reasoning_text: q.reasoning_text as string,
       }));
 
-    // ── Gallery rounds ────────────────────────────────────────────────────────
-    const gallery = (roundsRaw as any[])
-      .filter(r => byRound.has(r.id))
-      .slice(0, 40)
-      .map(r => {
-        const rp = (byRound.get(r.id) ?? []).sort((a: any, b: any) => (b.final_score ?? 0) - (a.final_score ?? 0));
-        const winner = rp[0];
-        const scores = rp.filter((p: any) => !p.dnf).map((p: any) => p.final_score as number);
+    // ── Gallery rounds (embedded players via PostgREST join) ─────────────────
+    const gallery = (Array.isArray(roundsRaw) ? roundsRaw : []).map((r: any) => {
+        const players: any[] = Array.isArray(r.arena_round_players) ? r.arena_round_players : [];
+        const nonDnf = players.filter((p: any) => !p.dnf && (p.final_score ?? 0) > 0);
+        const sorted  = [...nonDnf].sort((a: any, b: any) => (b.final_score ?? 0) - (a.final_score ?? 0));
+        const winner  = sorted[0];
+        const scores  = nonDnf.map((p: any) => p.final_score as number);
         return {
           round_id:      r.id,
           idiom_phrase:  r.idiom_phrase ?? r.ground_truth ?? '?',
@@ -201,9 +200,9 @@ async function getBenchmarkData() {
           winner_score:  winner?.final_score ?? 0,
           score_min:     scores.length ? Math.min(...scores) : 0,
           score_max:     scores.length ? Math.max(...scores) : 0,
-          correct_count: rp.filter((p: any) => !p.dnf && (p.final_score ?? 0) > 0).length,
+          correct_count: nonDnf.length,
         };
-      });
+      }).filter((r: any) => r.winner_score > 0);
 
     return { models, globalStats, liveInsights, sampleRound, quotes, gallery };
   } catch (err) {
