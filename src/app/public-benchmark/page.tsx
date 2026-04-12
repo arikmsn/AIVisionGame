@@ -857,16 +857,13 @@ export default async function PublicBenchmarkPage() {
             style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
               fontSize: '0.78rem',
-              color: '#777',
+              color: '#888',
               textDecoration: 'none',
               borderBottom: '1px solid #333',
               paddingBottom: 1,
-              transition: 'color 0.15s, border-color 0.15s',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#d4f25a'; (e.currentTarget as HTMLAnchorElement).style.borderBottomColor = '#d4f25a'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = '#777'; (e.currentTarget as HTMLAnchorElement).style.borderBottomColor = '#333'; }}
           >
-            Contact
+            Contact ↗
           </a>
         </div>
 
