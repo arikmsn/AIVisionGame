@@ -8,13 +8,15 @@
 import Image from 'next/image';
 import { LeaderboardTable } from './LeaderboardTable';
 
+export const dynamic = 'force-dynamic';
+
 // ── Data fetching ─────────────────────────────────────────────────────────────
 
 async function getBenchmarkData() {
   try {
     const base = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ai-vision-game.vercel.app';
     const res = await fetch(`${base}/api/public/leaderboard`, {
-      next: { revalidate: 3600 },
+      cache: 'no-store',
     });
     if (!res.ok) throw new Error(`API ${res.status}`);
     return res.json();
