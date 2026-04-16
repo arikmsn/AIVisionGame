@@ -267,7 +267,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
           display: 'flex', gap: 16, marginTop: 12, paddingTop: 12,
           borderTop: '1px solid #1e1e1e',
           fontFamily: 'var(--font-geist-sans, sans-serif)',
-          fontSize: '0.7rem', color: '#444', flexWrap: 'wrap',
+          fontSize: '0.7rem', color: '#888', flexWrap: 'wrap',
         }}>
           <span><span style={{ color: '#4ade80' }}>■</span> Accuracy ≥60%</span>
           <span><span style={{ color: '#d4f25a' }}>■</span> Accuracy 40–60%</span>
@@ -290,7 +290,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
           <tr style={{ borderBottom: '1px solid #222' }}>
             <th style={{ ...thBase, textAlign: 'left', width: 32, color: '#2e2e2e' }}>#</th>
             <th style={{ ...thBase, textAlign: 'left', minWidth: 190, color: '#888' }}>Model</th>
-            <th style={{ ...thBase, textAlign: 'left', minWidth: 80, color: '#3a3a3a', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>Provider</th>
+            <th style={{ ...thBase, textAlign: 'left', minWidth: 80, color: '#686868', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>Provider</th>
             {PRIMARY_COLS.map(col => (
               <th
                 key={col.key}
@@ -299,7 +299,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 style={{
                   ...thBase,
                   cursor: 'pointer',
-                  color: sortKey === col.key ? '#d4f25a' : (col.key === 'avg_round_score' ? '#888' : '#555'),
+                  color: sortKey === col.key ? '#d4f25a' : (col.key === 'avg_round_score' ? '#c0c0c0' : '#888'),
                   userSelect: 'none',
                   whiteSpace: 'nowrap',
                   fontWeight: col.key === 'avg_round_score' ? 700 : 500,
@@ -318,7 +318,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 style={{
                   ...thBase,
                   cursor: 'pointer',
-                  color: sortKey === col.key ? '#d4f25a' : '#333',
+                  color: sortKey === col.key ? '#d4f25a' : '#686868',
                   userSelect: 'none',
                   whiteSpace: 'nowrap',
                   opacity: sortKey === col.key ? 1 : 0.6,
@@ -342,7 +342,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
               >
                 {/* Rank */}
-                <td style={{ ...tdBase, color: i === 0 ? '#d4f25a' : '#383838', paddingRight: 8, fontWeight: i === 0 ? 700 : 400 }}>{i + 1}</td>
+                <td style={{ ...tdBase, color: i === 0 ? '#d4f25a' : '#606060', paddingRight: 8, fontWeight: i === 0 ? 700 : 400 }}>{i + 1}</td>
 
                 {/* Model name + bar */}
                 <td style={{ ...tdBase, textAlign: 'left' }}>
@@ -357,7 +357,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                 </td>
 
                 {/* Provider */}
-                <td style={{ ...tdBase, textAlign: 'left', color: '#484848', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>
+                <td style={{ ...tdBase, textAlign: 'left', color: '#686868', fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.73rem' }}>
                   {m.provider}
                 </td>
 
@@ -390,7 +390,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
                   return (
                     <td key={col.key} style={{
                       ...tdBase,
-                      color: isActive ? colColor(val, col.key, false) : '#353535',
+                      color: isActive ? colColor(val, col.key, false) : '#707070',
                       fontWeight: isActive ? 600 : 400,
                       background: isActive ? 'rgba(212,242,90,0.025)' : 'transparent',
                       opacity: isActive ? 1 : 0.8,
@@ -414,7 +414,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
         borderTop: '1px solid #1e1e1e',
         fontFamily: 'var(--font-geist-sans, sans-serif)',
         fontSize: '0.72rem',
-        color: '#444',
+        color: '#888',
         flexWrap: 'wrap',
         alignItems: 'center',
       }}>
@@ -422,7 +422,7 @@ export function LeaderboardTable({ models }: { models: ModelRow[] }) {
         <span><span style={{ color: '#4ade80' }}>■</span> Accuracy ≥60%</span>
         <span><span style={{ color: '#d4f25a' }}>■</span> Accuracy 40–60%</span>
         <span><span style={{ color: '#f87171' }}>■</span> DNF &gt;30%</span>
-        <span style={{ marginLeft: 'auto', color: '#2a2a2a' }}>Avg Score = primary metric</span>
+        <span style={{ marginLeft: 'auto', color: '#666' }}>Avg Score = primary metric</span>
       </div>
     </div>
   );

@@ -51,6 +51,12 @@ const EXTRA_SNAPSHOT_META: Record<string, { caption: string; note: string }> = {
   },
 };
 
+/** True when reasoning_text is an API/infra error string, not real reasoning. */
+function isApiErrorText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  return /rate.?limit|limit.?exceeded|api\s+(error|limit|timeout)|429|timed?\s*out|connection\s+error|service\s+unavailable|internal\s+server/i.test(text);
+}
+
 function sfetch(path: string) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -383,7 +389,7 @@ export default async function PublicBenchmarkPage() {
           <span style={{
             fontFamily: 'var(--font-geist-mono, monospace)',
             fontSize: '0.7rem',
-            color: '#353535',
+            color: '#888',
           }}>
             read-only · public
           </span>
@@ -419,7 +425,7 @@ export default async function PublicBenchmarkPage() {
             <p style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
               fontSize: '0.73rem',
-              color: '#444',
+              color: '#666',
             }}>
               {globalStats.date_from} – {globalStats.date_to} ·{' '}
               {globalStats.total_tournaments} tournaments ·{' '}
@@ -460,7 +466,7 @@ export default async function PublicBenchmarkPage() {
               <div style={{
                 fontFamily: 'var(--font-geist-sans, sans-serif)',
                 fontSize: '0.72rem',
-                color: '#666',
+                color: '#888',
                 letterSpacing: '0.07em',
                 textTransform: 'uppercase',
               }}>
@@ -477,7 +483,7 @@ export default async function PublicBenchmarkPage() {
               <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.62rem', color: '#d4f25a', opacity: 0.65, letterSpacing: '0.1em', textTransform: 'uppercase', flexShrink: 0 }}>
                 How this benchmark works
               </span>
-              <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.8rem', color: '#616161' }}>
+              <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.8rem', color: '#888' }}>
                 11 models · same image · simultaneous start · exponential score decay
               </span>
             </div>
@@ -491,7 +497,7 @@ export default async function PublicBenchmarkPage() {
                 ['Standings visibility','Live to all models'],
               ] as [string, string][]).map(([label, val]) => (
                 <div key={label} className="bm-meth-item">
-                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem', color: '#444', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 7 }}>
+                  <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem', color: '#888', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 7 }}>
                     {label}
                   </div>
                   <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.88rem', fontWeight: 600, color: '#c0c0c0' }}>
@@ -518,7 +524,7 @@ export default async function PublicBenchmarkPage() {
             <div style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
               fontSize: '0.6rem',
-              color: '#3a3a3a',
+              color: '#888',
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
               marginBottom: 10,
@@ -528,7 +534,7 @@ export default async function PublicBenchmarkPage() {
             <ul style={{
               fontFamily: 'var(--font-geist-sans, sans-serif)',
               fontSize: '0.8rem',
-              color: '#9a9a9a',
+              color: '#b0b0b0',
               lineHeight: 1.65,
               margin: 0,
               padding: '0 0 0 16px',
@@ -571,7 +577,7 @@ export default async function PublicBenchmarkPage() {
                 <h3 style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.92rem', fontWeight: 700, color: '#e8e8e8', margin: '0 0 10px', lineHeight: 1.3 }}>
                   {ins.headline}
                 </h3>
-                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#989898', lineHeight: 1.68, margin: 0 }}>
+                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#aaaaaa', lineHeight: 1.68, margin: 0 }}>
                   {ins.detail}
                 </p>
               </div>
@@ -582,13 +588,13 @@ export default async function PublicBenchmarkPage() {
           <div className="bm-static-grid" style={{ background: '#1a1a1a', borderTop: 'none', borderRadius: '0 0 6px 6px', overflow: 'hidden' }}>
             {STATIC_INSIGHTS.map((ins, i) => (
               <div key={ins.id} style={{ background: '#090909', padding: '22px 24px', borderLeft: '2px solid #1e1e1e' }}>
-                <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#3a3a3a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+                <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#585858', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
                   {String(i + 1).padStart(2, '0')}
                 </div>
                 <h3 style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.9rem', fontWeight: 600, color: '#d8d8d8', margin: '0 0 10px', lineHeight: 1.35 }}>
                   {ins.headline}
                 </h3>
-                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#8a8a8a', lineHeight: 1.68, margin: 0 }}>
+                <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.81rem', color: '#a8a8a8', lineHeight: 1.68, margin: 0 }}>
                   {ins.detail}
                 </p>
               </div>
@@ -625,7 +631,7 @@ export default async function PublicBenchmarkPage() {
                   <div style={{
                     fontFamily: 'var(--font-geist-mono, monospace)',
                     fontSize: '0.62rem',
-                    color: '#3a3a3a',
+                    color: '#888',
                     letterSpacing: '0.1em',
                     textTransform: 'uppercase',
                     marginBottom: 12,
@@ -645,7 +651,7 @@ export default async function PublicBenchmarkPage() {
                   <p style={{
                     fontFamily: 'var(--font-geist-sans, sans-serif)',
                     fontSize: '0.82rem',
-                    color: '#9a9a9a',
+                    color: '#b0b0b0',
                     lineHeight: 1.65,
                     margin: 0,
                   }}>
@@ -669,13 +675,13 @@ export default async function PublicBenchmarkPage() {
                   padding: '0 24px 12px',
                   fontFamily: 'var(--font-geist-mono, monospace)',
                   fontSize: '0.65rem',
-                  color: '#444',
+                  color: '#888',
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                 }}>
                   Finish order — score ↓
                 </div>
-                {sampleRound.players.map((p: any, i: number) => (
+                {sampleRound.players.filter((p: any) => !isApiErrorText(p.reasoning_snippet)).map((p: any, i: number) => (
                   <div key={p.model_id} className="bm-pl-row" style={{
                     gap: 0,
                     padding: '10px 24px',
@@ -685,7 +691,7 @@ export default async function PublicBenchmarkPage() {
                     <span style={{
                       fontFamily: 'var(--font-geist-mono, monospace)',
                       fontSize: '0.72rem',
-                      color: i === 0 ? '#d4f25a' : '#333',
+                      color: i === 0 ? '#d4f25a' : '#707070',
                       paddingTop: 2,
                     }}>
                       {i + 1}
@@ -711,7 +717,7 @@ export default async function PublicBenchmarkPage() {
                     <span style={{
                       fontFamily: 'var(--font-geist-mono, monospace)',
                       fontSize: '0.83rem',
-                      color: i === 0 ? '#d4f25a' : '#555',
+                      color: i === 0 ? '#d4f25a' : '#787878',
                       paddingTop: 1,
                     }}>
                       {p.final_score.toLocaleString()}
@@ -719,7 +725,7 @@ export default async function PublicBenchmarkPage() {
                     <span className="bm-pl-reason" style={{
                       fontFamily: 'var(--font-geist-sans, sans-serif)',
                       fontSize: '0.75rem',
-                      color: '#7a7a7a',
+                      color: '#a8a8a8',
                       lineHeight: 1.55,
                       letterSpacing: '0.005em',
                     }}>
@@ -800,7 +806,7 @@ export default async function PublicBenchmarkPage() {
             <div style={{
               fontFamily: 'var(--font-geist-mono, monospace)',
               fontSize: '0.65rem',
-              color: '#333',
+              color: '#666',
               letterSpacing: '0.1em',
               textTransform: 'uppercase',
               marginBottom: 10,
@@ -840,7 +846,7 @@ export default async function PublicBenchmarkPage() {
           <span style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
             fontSize: '0.82rem',
-            color: '#444',
+            color: '#888',
           }}>
             Questions or collaboration?
           </span>
@@ -898,7 +904,7 @@ function SectionHeader({ label, title, subtitle }: { label: string; title: strin
         <p style={{
           fontFamily: 'var(--font-geist-sans, sans-serif)',
           fontSize: '0.82rem',
-          color: '#666',
+          color: '#888',
           margin: 0,
         }}>
           {subtitle}
@@ -909,7 +915,9 @@ function SectionHeader({ label, title, subtitle }: { label: string; title: strin
 }
 
 function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
-  const { caption, note, idiom_phrase, image_url, round_number, players } = snapshot;
+  const { caption, note, idiom_phrase, image_url, round_number, players: rawPlayers } = snapshot;
+  const players = (rawPlayers as any[]).filter((p: any) => !isApiErrorText(p.reasoning_snippet));
+  const excludedCount = (rawPlayers as any[]).length - players.length;
   return (
     <div style={{
       border: '1px solid #1d1d1d',
@@ -951,13 +959,13 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
           </h3>
           <p style={{
             fontFamily: 'var(--font-geist-sans, sans-serif)',
-            fontSize: '0.82rem', color: '#888',
+            fontSize: '0.82rem', color: '#b0b0b0',
             lineHeight: 1.6, margin: '0 0 8px',
           }}>
             {note}
           </p>
           {round_number && (
-            <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#2a2a2a', marginTop: 8 }}>
+            <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#707070', marginTop: 8 }}>
               Round {round_number}
             </div>
           )}
@@ -969,18 +977,18 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
         <div style={{
           padding: '0 24px 10px',
           fontFamily: 'var(--font-geist-mono, monospace)',
-          fontSize: '0.62rem', color: '#3a3a3a',
+          fontSize: '0.62rem', color: '#888',
           letterSpacing: '0.08em', textTransform: 'uppercase',
         }}>
           Finish order — score ↓
         </div>
-        {(players as any[]).map((p: any, i: number) => (
+        {players.map((p: any, i: number) => (
           <div key={p.model_id} className="bm-snap-pl" style={{
             gap: 0, padding: '8px 24px',
             borderTop: i === 0 ? 'none' : '1px solid #141414',
             alignItems: 'start',
           }}>
-            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.72rem', color: i === 0 ? '#d4f25a' : '#333', paddingTop: 2 }}>
+            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.72rem', color: i === 0 ? '#d4f25a' : '#707070', paddingTop: 2 }}>
               {i + 1}
             </span>
             <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.83rem', fontWeight: 600, color: '#c8c8c8', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -989,16 +997,23 @@ function RoundSnapshotPanel({ snapshot }: { snapshot: any }) {
             </span>
             <span style={{
               fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.83rem', fontWeight: 600,
-              color: p.dnf ? '#2a2a2a' : (i === 0 ? '#d4f25a' : (p.final_score < 0 ? '#f87171aa' : '#606060')),
+              color: p.dnf ? '#3a3a3a' : (i === 0 ? '#d4f25a' : (p.final_score < 0 ? '#f87171aa' : '#787878')),
               paddingTop: 1,
             }}>
               {p.dnf ? 'DNF' : p.final_score.toLocaleString()}
             </span>
-            <span className="bm-pl-reason" style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.74rem', color: '#7a7a7a', lineHeight: 1.5, letterSpacing: '0.005em' }}>
+            <span className="bm-pl-reason" style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.74rem', color: '#a8a8a8', lineHeight: 1.5, letterSpacing: '0.005em' }}>
               {p.reasoning_snippet?.slice(0, 100)}{p.reasoning_snippet?.length > 100 ? '…' : ''}
             </span>
           </div>
         ))}
+        {excludedCount > 0 && (
+          <div style={{ padding: '7px 24px', borderTop: '1px solid #141414' }}>
+            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#707070' }}>
+              {excludedCount} model{excludedCount > 1 ? 's' : ''} excluded (API errors — no guess submitted)
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.82.0",
     "@fal-ai/serverless-client": "^0.15.0",
     "@google/generative-ai": "^0.24.1",
+    "@vercel/analytics": "^2.0.1",
     "canvas-confetti": "^1.9.4",
     "fal": "^0.1.1",
     "framer-motion": "^12.38.0",

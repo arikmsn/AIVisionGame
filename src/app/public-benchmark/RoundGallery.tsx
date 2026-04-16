@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 
 // ─────────────────────── interfaces ─────────────────────────────────────────
@@ -82,7 +82,7 @@ function pagerBtn(disabled: boolean): React.CSSProperties {
   return {
     background: 'none',
     border: '1px solid #222',
-    color: disabled ? '#2a2a2a' : '#555',
+    color: disabled ? '#606060' : '#888',
     padding: '5px 14px',
     cursor: disabled ? 'default' : 'pointer',
     fontFamily: 'var(--font-geist-mono, monospace)',
@@ -100,9 +100,20 @@ export function RoundGallery({ rounds }: { rounds: RoundSummary[] }) {
   const [loading, setLoading]       = useState(false);
   const [error, setError]           = useState(false);
   const [hoveredId, setHoveredId]   = useState<string | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const width = useWindowWidth();
   const isMobile  = width < 540;
   const isTablet  = width < 860;
+
+  // Scroll the detail panel into view whenever a new round is opened
+  useEffect(() => {
+    if (!selectedId) return;
+    // setTimeout(0) defers until after React has committed the DOM and browser has laid out
+    const t = setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => clearTimeout(t);
+  }, [selectedId]);
 
   const totalPages    = Math.ceil(rounds.length / PAGE_SIZE);
   const visibleRounds = rounds.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -203,24 +214,24 @@ export function RoundGallery({ rounds }: { rounds: RoundSummary[] }) {
 
                 {/* Winner + score */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.71rem', color: '#616161' }}>
+                  <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.71rem', color: '#787878' }}>
                     {r.winner_icon} {r.winner_label.split(' ').slice(0, 2).join(' ')}
                   </span>
-                  <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.71rem', fontWeight: 600, color: isSelected ? '#d4f25a' : '#3f3f3f' }}>
+                  <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.71rem', fontWeight: 600, color: isSelected ? '#d4f25a' : '#787878' }}>
                     {r.winner_score}
                   </span>
                 </div>
 
                 {/* Meta + CTA */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 1 }}>
-                  <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.61rem', color: '#333' }}>
+                  <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.61rem', color: '#707070' }}>
                     {r.correct_count}/11 · {r.score_min}–{r.score_max}
                   </span>
                   <span style={{
                     fontFamily:  'var(--font-geist-sans, sans-serif)',
                     fontSize:    '0.66rem',
                     fontWeight:  500,
-                    color:       isSelected ? '#666' : isHovered ? '#555' : '#2f2f2f',
+                    color:       isSelected ? '#aaaaaa' : isHovered ? '#909090' : '#707070',
                     letterSpacing: '0.01em',
                     transition:  'color 0.15s',
                   }}>
@@ -235,13 +246,14 @@ export function RoundGallery({ rounds }: { rounds: RoundSummary[] }) {
 
       {/* ── Expanded detail panel ───────────────────────────────────────────── */}
       {selectedId && (
-        <div style={{
-          border:       '1px solid #1e1e1e',
-          borderTop:    '1px solid #d4f25a22',
-          borderRadius: '0 0 4px 4px',
-          background:   '#080808',
-          overflow:     'hidden',
-          marginTop:    1,
+        <div ref={detailRef} style={{
+          border:          '1px solid #1e1e1e',
+          borderTop:       '1px solid #d4f25a22',
+          borderRadius:    '0 0 4px 4px',
+          background:      '#080808',
+          overflow:        'hidden',
+          marginTop:       1,
+          scrollMarginTop: 24,
         }}>
           {loading && (
             <div style={{ padding: 40, textAlign: 'center', color: '#444', fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.78rem' }}>
@@ -263,13 +275,13 @@ export function RoundGallery({ rounds }: { rounds: RoundSummary[] }) {
           <button onClick={() => changePage(Math.max(0, page - 1))} disabled={page === 0} style={pagerBtn(page === 0)}>
             ← Prev
           </button>
-          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.72rem', color: '#444' }}>
+          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.72rem', color: '#888' }}>
             {page + 1} / {totalPages}
           </span>
           <button onClick={() => changePage(Math.min(totalPages - 1, page + 1))} disabled={page >= totalPages - 1} style={pagerBtn(page >= totalPages - 1)}>
             Next →
           </button>
-          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#333', marginLeft: 8 }}>
+          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.65rem', color: '#888', marginLeft: 8 }}>
             {rounds.length} rounds total
           </span>
         </div>
@@ -281,9 +293,9 @@ export function RoundGallery({ rounds }: { rounds: RoundSummary[] }) {
 // ─────────────────────── expanded panel ─────────────────────────────────────
 
 function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: boolean }) {
-  // Filter out models that never produced a guess AND have only error reasoning
+  // Exclude any model whose reasoning is an API/infra error — they never submitted a real guess
   const activePlayers = detail.players.filter(
-    p => !(isErrorText(p.reasoning_snippet) && !p.first_guess_text)
+    p => !isErrorText(p.reasoning_snippet)
   );
   const excludedCount = detail.players.length - activePlayers.length;
   const correctCount  = activePlayers.filter(p => p.is_correct).length;
@@ -310,13 +322,13 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
           </div>
         )}
         <div style={{ padding: isMobile ? '14px 16px' : '18px 24px', borderLeft: isMobile ? 'none' : '1px solid #141414', borderTop: isMobile ? '1px solid #141414' : 'none' }}>
-          <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem', color: '#3a3a3a', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
+          <div style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem', color: '#585858', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 8 }}>
             Round {detail.round_number} · {correctCount} / {activePlayers.length} correct
           </div>
           <h4 style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: isMobile ? '0.95rem' : '1.05rem', fontWeight: 700, color: '#eaeaea', margin: '0 0 10px', letterSpacing: '-0.01em' }}>
             &ldquo;{detail.idiom_phrase}&rdquo;
           </h4>
-          <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem', color: '#585858', lineHeight: 1.6, margin: 0 }}>
+          <p style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.75rem', color: '#7a7a7a', lineHeight: 1.6, margin: 0 }}>
             Scores decay exponentially from ~800 over time. First correct guess scores highest.
           </p>
         </div>
@@ -328,7 +340,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
         padding: isMobile ? '7px 12px' : '7px 16px',
         borderTop: '1px solid #141414',
         fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.58rem',
-        color: '#3a3a3a', letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: '#585858', letterSpacing: '0.08em', textTransform: 'uppercase',
         gap: 8, alignItems: 'center',
       }}>
         <span>#</span>
@@ -360,7 +372,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
           }}>
 
             {/* # */}
-            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.7rem', color: i === 0 ? '#d4f25a' : '#2a2a2a', paddingTop: 3 }}>
+            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.7rem', color: i === 0 ? '#d4f25a' : '#707070', paddingTop: 3 }}>
               {i + 1}
             </span>
 
@@ -377,7 +389,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
                   <>
                     &ldquo;{p.first_guess_text.slice(0, 36)}{p.first_guess_text.length > 36 ? '…' : ''}&rdquo;
                     {!p.dnf && p.first_guess_ms != null && (
-                      <span style={{ color: '#333', display: 'block', fontSize: '0.62rem', marginTop: 2 }}>
+                      <span style={{ color: '#585858', display: 'block', fontSize: '0.62rem', marginTop: 2 }}>
                         {(p.first_guess_ms / 1000).toFixed(1)}s
                       </span>
                     )}
@@ -391,7 +403,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
             {/* Score */}
             <span style={{
               fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.76rem', fontWeight: 600,
-              color: p.dnf ? '#2a2a2a' : (i === 0 ? '#d4f25a' : (p.final_score < 0 ? '#f87171aa' : '#686868')),
+              color: p.dnf ? '#3a3a3a' : (i === 0 ? '#d4f25a' : (p.final_score < 0 ? '#f87171aa' : '#8a8a8a')),
               textAlign: 'right', paddingTop: 3,
             }}>
               {p.dnf ? '—' : p.final_score.toLocaleString()}
@@ -409,7 +421,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
             </span>
 
             {/* Attempts */}
-            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.7rem', fontWeight: 600, color: '#3a3a3a', textAlign: 'center', paddingTop: 3 }}>
+            <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.7rem', fontWeight: 600, color: '#606060', textAlign: 'center', paddingTop: 3 }}>
               {p.dnf ? '—' : (p.attempts_used ?? '—')}
             </span>
 
@@ -421,7 +433,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
                     API error
                   </span>
                 ) : (
-                  <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.71rem', color: '#686868', letterSpacing: '0.01em', lineHeight: 1.6 }}>
+                  <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.71rem', color: '#a8a8a8', letterSpacing: '0.01em', lineHeight: 1.6 }}>
                     {reasoningText ?? <span style={{ color: '#2a2a2a' }}>—</span>}
                   </span>
                 )}
@@ -430,7 +442,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
                     <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.57rem', color: '#d4f25a', opacity: 0.6, letterSpacing: '0.07em', textTransform: 'uppercase', flexShrink: 0, paddingTop: 1 }}>
                       context
                     </span>
-                    <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.68rem', color: '#5e5e5e', lineHeight: 1.45, fontStyle: 'italic' }}>
+                    <span style={{ fontFamily: 'var(--font-geist-sans, sans-serif)', fontSize: '0.68rem', color: '#8a8a8a', lineHeight: 1.45, fontStyle: 'italic' }}>
                       {context}
                     </span>
                   </div>
@@ -445,7 +457,7 @@ function ExpandedRound({ detail, isMobile }: { detail: RoundDetail; isMobile: bo
       {/* ── Excluded rows notice ──────────────────────────────────────────── */}
       {excludedCount > 0 && (
         <div style={{ padding: '8px 16px', borderTop: '1px solid #0e0e0e', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#2a2a2a' }}>
+          <span style={{ fontFamily: 'var(--font-geist-mono, monospace)', fontSize: '0.6rem', color: '#707070' }}>
             {excludedCount} model{excludedCount > 1 ? 's' : ''} excluded (API errors — no guess submitted)
           </span>
         </div>
