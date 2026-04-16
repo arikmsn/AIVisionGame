@@ -12,7 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const config = {
-  matcher: ['/admin/:path*'],
+  matcher: ['/admin/:path*', '/forecast-arena/:path*'],
 };
 
 const DENY_401 = new NextResponse('Authentication required', {
