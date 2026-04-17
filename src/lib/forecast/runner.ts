@@ -99,20 +99,19 @@ async function callGoogle(
 
   const result = await model.generateContent({
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-    generationConfig: {
-      maxOutputTokens:  maxTokens,
-      responseMimeType: 'application/json',
-    },
+    generationConfig: { maxOutputTokens: maxTokens },
   });
 
-  // For thinking models, the JSON answer may be split across multiple parts.
-  // Concatenate all non-thought text parts; fall back to the full text() response.
-  const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
-  const nonThoughtParts = parts.filter((p: any) => p.text && !p.thought);
-  let text = nonThoughtParts.length > 0
-    ? nonThoughtParts.map((p: any) => p.text).join('')
-    : (result.response.text?.() ?? '');
-  text = text.trim();
+  // response.text() aggregates all candidate parts (including thinking models).
+  // For safety, also try concatenating non-thought parts explicitly.
+  let text = '';
+  try { text = result.response.text().trim(); } catch { /* swallow */ }
+  if (!text) {
+    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+    const nonThought = parts.filter((p: any) => p.text && !p.thought);
+    text = (nonThought.length > 0 ? nonThought : parts)
+      .map((p: any) => p.text ?? '').join('').trim();
+  }
 
   const meta = result.response.usageMetadata;
   return {
