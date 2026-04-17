@@ -89,22 +89,29 @@ async function callGoogle(
   maxTokens:    number,
 ): Promise<ModelResponse> {
   const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
-  const model = genAI.getGenerativeModel({ model: modelId });
+  // Pass system prompt via systemInstruction; force JSON MIME type so output is
+  // always valid JSON (no preamble, no markdown fences from thinking models).
+  const model = genAI.getGenerativeModel({
+    model: modelId,
+    systemInstruction: systemPrompt,
+  });
   const start = Date.now();
 
   const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] }],
-    generationConfig: { maxOutputTokens: maxTokens },
+    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    generationConfig: {
+      maxOutputTokens:  maxTokens,
+      responseMimeType: 'application/json',
+    },
   });
 
-  let text = result.response.text().trim();
-  if (!text) {
-    // Gemini thinking models surface output inside parts
-    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
-    text = parts.find((p: any) => p.text && !p.thought)?.text?.trim()
-        ?? parts.find((p: any) => p.text)?.text?.trim()
-        ?? '';
-  }
+  // For thinking models, non-thought parts hold the final answer
+  let text = '';
+  const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+  text = parts.find((p: any) => p.text && !p.thought)?.text?.trim()
+      ?? parts.find((p: any) => p.text)?.text?.trim()
+      ?? result.response.text?.()?.trim()
+      ?? '';
 
   const meta = result.response.usageMetadata;
   return {
