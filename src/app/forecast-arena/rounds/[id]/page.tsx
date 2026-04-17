@@ -10,6 +10,51 @@ export const dynamic = 'force-dynamic';
 function pnlColor(n: number) { return n > 0 ? '#4ade80' : n < 0 ? '#f87171' : '#888'; }
 function pnlStr(n: number)   { return `${n >= 0 ? '+' : ''}$${n.toFixed(2)}`; }
 
+const ACTION_COLOR: Record<string, string> = {
+  hold:        '#444',
+  scale_in:    '#4ade80',
+  scale_out:   '#60a5fa',
+  stop_loss:   '#f87171',
+  expiry_exit: '#f59e0b',
+  close:       '#a78bfa',
+};
+
+function buildPositionStory(pos: any, ticks: any[]): string {
+  const side  = pos.side === 'long' ? 'LONG YES' : 'SHORT NO';
+  const entry = (Number(pos.avg_entry_price) * 100).toFixed(1);
+  const cost  = Number(pos.cost_basis_usd).toFixed(2);
+  const parts: string[] = [`Entered ${side} at ${entry}% with $${cost}.`];
+
+  for (const t of ticks) {
+    const mp = (Number(t.market_price) * 100).toFixed(1);
+    if (t.action === 'scale_in') {
+      const delta = t.size_delta_usd ? `+$${Number(t.size_delta_usd).toFixed(2)}` : '';
+      parts.push(`Scaled in ${delta} at ${mp}% (tick ${t.tick_number}).`);
+    } else if (t.action === 'scale_out') {
+      const rlz = t.realized_pnl != null ? `, realized ${pnlStr(Number(t.realized_pnl))}` : '';
+      parts.push(`Trimmed 50% at ${mp}%${rlz} (tick ${t.tick_number}).`);
+    } else if (t.action === 'stop_loss') {
+      parts.push(`Stop-loss triggered at ${mp}% (tick ${t.tick_number}).`);
+    } else if (t.action === 'expiry_exit') {
+      parts.push(`Exited before expiry at ${mp}% (tick ${t.tick_number}).`);
+    } else if (t.action === 'hold') {
+      parts.push(`Held at ${mp}% (tick ${t.tick_number}).`);
+    }
+  }
+
+  const totalPnl = Number(pos.realized_pnl || 0) +
+    (pos.status === 'open' ? Number(pos.unrealized_pnl || 0) : 0);
+  const retPct = pos.cost_basis_usd > 0 ? totalPnl / Number(pos.cost_basis_usd) : 0;
+  const retStr = `${retPct >= 0 ? '+' : ''}${(retPct * 100).toFixed(1)}%`;
+
+  if (pos.status === 'closed') {
+    parts.push(`Final P&L: ${pnlStr(totalPnl)} (${retStr}).`);
+  } else {
+    parts.push(`Still open — unrealized ${pnlStr(totalPnl)} (${retStr}).`);
+  }
+  return parts.join(' ');
+}
+
 const thStyle: React.CSSProperties = {
   padding: '6px 10px', textAlign: 'left', color: '#555',
   fontWeight: 500, whiteSpace: 'nowrap', fontSize: '0.65rem',
@@ -104,30 +149,32 @@ export default async function RoundDetailPage({
       {/* ── Positions opened from this round ── */}
       {positions.length > 0 && (
         <section style={{ marginTop: '28px' }}>
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '12px', color: '#ccc' }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#ccc' }}>
             Positions Opened ({positions.length})
           </h3>
-          <p style={{ fontSize: '0.7rem', color: '#444', marginBottom: '12px', lineHeight: 1.6 }}>
-            Positions open automatically when an agent's forecast shows ≥ 10% edge vs market price.
-            Ongoing management is rule-based (stop-loss / scale-out / scale-in / hold) — no further LLM calls.
+          <p style={{ fontSize: '0.7rem', color: '#444', marginBottom: '14px', lineHeight: 1.7 }}>
+            A position opens when an agent&apos;s forecast diverges ≥ 10% from the Polymarket price (size = 2% wallet, max $200).
+            All subsequent management is <strong style={{ color: '#555' }}>rule-based, no LLM</strong>:{' '}
+            expiry_exit → stop_loss → scale_out → scale_in → hold.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {positions.map((p: any) => {
-              const agent  = agentMap.get(p.agent_id);
-              const ticks  = ticksByPos.get(p.id) ?? [];
-              const rlz    = Number(p.realized_pnl   || 0);
-              const unr    = Number(p.unrealized_pnl  || 0);
+              const agent    = agentMap.get(p.agent_id);
+              const ticks    = ticksByPos.get(p.id) ?? [];
+              const rlz      = Number(p.realized_pnl   || 0);
+              const unr      = Number(p.unrealized_pnl  || 0);
               const totalPnl = rlz + (p.status === 'open' ? unr : 0);
-              const ret    = p.cost_basis_usd > 0 ? totalPnl / Number(p.cost_basis_usd) : 0;
+              const ret      = p.cost_basis_usd > 0 ? totalPnl / Number(p.cost_basis_usd) : 0;
+              const story    = buildPositionStory(p, ticks);
 
               return (
                 <div key={p.id} style={{
                   background: '#0d0d0d', border: '1px solid #1e1e1e',
-                  borderRadius: '6px', padding: '14px 18px',
+                  borderRadius: '6px', padding: '16px 18px',
                 }}>
                   {/* Header row */}
-                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#ddd' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '6px' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#ddd' }}>
                       <Link href={`/forecast-arena/players/${agent?.slug}`} style={{ color: '#ddd', textDecoration: 'none' }}>
                         {agent?.display_name ?? p.agent_id.slice(0, 8)}
                       </Link>
@@ -146,13 +193,7 @@ export default async function RoundDetailPage({
                     }}>
                       {p.status}
                     </span>
-                    <span style={{ fontSize: '0.73rem', color: '#666' }}>
-                      {(Number(p.avg_entry_price) * 100).toFixed(1)}% entry
-                    </span>
-                    <span style={{ fontSize: '0.73rem', color: '#555' }}>
-                      ${Number(p.cost_basis_usd).toFixed(2)} deployed
-                    </span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: pnlColor(totalPnl) }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 700, color: pnlColor(totalPnl), marginLeft: 'auto' }}>
                       {pnlStr(totalPnl)}
                       <span style={{ fontSize: '0.65rem', color: '#444', marginLeft: '4px' }}>
                         ({ret >= 0 ? '+' : ''}{(ret * 100).toFixed(1)}%)
@@ -160,42 +201,77 @@ export default async function RoundDetailPage({
                     </span>
                   </div>
 
-                  {/* Tick log */}
-                  {ticks.length > 0 ? (
-                    <div style={{
-                      marginTop: '6px', padding: '8px 10px',
-                      background: '#080808', borderRadius: '3px',
-                      fontSize: '0.68rem', lineHeight: 2,
-                    }}>
-                      <div style={{ color: '#333', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
-                        Tick history ({ticks.length} ticks)
+                  {/* Metrics */}
+                  <div style={{ display: 'flex', gap: '18px', fontSize: '0.7rem', color: '#555', marginBottom: '10px', flexWrap: 'wrap' }}>
+                    <span>Entry <strong style={{ color: '#888' }}>{(Number(p.avg_entry_price)*100).toFixed(1)}%</strong></span>
+                    <span>Size <strong style={{ color: '#888' }}>${Number(p.cost_basis_usd).toFixed(2)}</strong></span>
+                    <span>Contracts <strong style={{ color: '#888' }}>{Number(p.contracts).toFixed(4)}</strong></span>
+                    {rlz !== 0 && <span>Realized <strong style={{ color: pnlColor(rlz) }}>{pnlStr(rlz)}</strong></span>}
+                    <span>{ticks.length} tick{ticks.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  {/* Position story */}
+                  <div style={{
+                    fontSize: '0.7rem', color: '#555', fontStyle: 'italic',
+                    padding: '8px 12px', background: '#060606',
+                    borderLeft: '2px solid #252525', borderRadius: '0 4px 4px 0',
+                    marginBottom: '14px', lineHeight: 1.7,
+                  }}>
+                    {story}
+                  </div>
+
+                  {/* t0 / t1 / tn timeline */}
+                  <div style={{ overflowX: 'auto' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 'max-content' }}>
+                      {/* t0: entry */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' }}>
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#4ade80', marginTop: '2px' }} />
+                        <div style={{ fontSize: '0.58rem', color: '#555', marginTop: '4px', textAlign: 'center', lineHeight: 1.5 }}>
+                          <span style={{ color: '#4ade80', fontWeight: 700 }}>t0 ENTRY</span><br />
+                          {(Number(p.avg_entry_price)*100).toFixed(1)}%<br />
+                          ${Number(p.cost_basis_usd).toFixed(0)}
+                        </div>
                       </div>
-                      {ticks.map((t: any) => {
-                        const actionColor = t.action === 'hold' ? '#444'
-                          : t.action === 'scale_in'  ? '#4ade80'
-                          : t.action === 'scale_out' ? '#60a5fa'
-                          : '#f87171';
-                        return (
-                          <div key={t.id} style={{ display: 'flex', gap: '12px', color: '#444', flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: 'monospace', minWidth: '150px', color: '#2a2a2a' }}>
-                              {new Date(t.created_at).toLocaleString()}
-                            </span>
-                            <span style={{ color: '#2a2a2a' }}>tick #{t.tick_number}</span>
-                            <span style={{ color: actionColor, fontWeight: 600 }}>{t.action}</span>
-                            <span style={{ color: '#3a3a3a' }}>mkt {(Number(t.market_price) * 100).toFixed(1)}%</span>
-                            {t.size_delta_usd && (
-                              <span style={{ color: pnlColor(Number(t.size_delta_usd)) }}>
-                                {Number(t.size_delta_usd) > 0 ? '+' : ''}${Number(t.size_delta_usd).toFixed(2)}
-                              </span>
-                            )}
-                            {t.notes && <span style={{ color: '#2e2e2e' }}>{t.notes}</span>}
+
+                      {/* ticks */}
+                      {ticks.map((t: any) => (
+                        <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start' }}>
+                          <div style={{ width: '28px', height: '2px', background: '#1e1e1e', marginTop: '6px', flexShrink: 0 }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: ACTION_COLOR[t.action] ?? '#555', marginTop: '2px' }} />
+                            <div style={{ fontSize: '0.58rem', color: '#555', marginTop: '4px', textAlign: 'center', lineHeight: 1.5 }}>
+                              <span style={{ color: ACTION_COLOR[t.action] ?? '#555', fontWeight: 700 }}>t{t.tick_number}</span><br />
+                              <span style={{ color: ACTION_COLOR[t.action] ?? '#555' }}>{t.action}</span><br />
+                              {(Number(t.market_price)*100).toFixed(1)}%<br />
+                              {t.unrealized_pnl != null && (
+                                <span style={{ color: pnlColor(Number(t.unrealized_pnl)) }}>
+                                  {pnlStr(Number(t.unrealized_pnl))}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
+
+                      {/* close dot if closed */}
+                      {p.status === 'closed' && ticks.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                          <div style={{ width: '28px', height: '2px', background: '#1e1e1e', marginTop: '6px', flexShrink: 0 }} />
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px' }}>
+                            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: pnlColor(rlz), marginTop: '2px' }} />
+                            <div style={{ fontSize: '0.58rem', color: '#555', marginTop: '4px', textAlign: 'center', lineHeight: 1.5 }}>
+                              <span style={{ color: pnlColor(rlz), fontWeight: 700 }}>CLOSED</span><br />
+                              <span style={{ color: pnlColor(rlz) }}>{pnlStr(rlz)}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div style={{ fontSize: '0.65rem', color: '#2a2a2a', marginTop: '4px' }}>
-                      No ticks yet — position just opened.
+                  </div>
+
+                  {ticks.length === 0 && (
+                    <div style={{ fontSize: '0.63rem', color: '#2a2a2a', marginTop: '6px' }}>
+                      No ticks yet — position just opened, first tick at next cron run (03:00 UTC).
                     </div>
                   )}
                 </div>

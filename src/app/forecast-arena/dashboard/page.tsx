@@ -269,6 +269,66 @@ export default async function DashboardPage() {
         )}
       </section>
 
+      {/* ── Position management logic (architecture reference) ── */}
+      <section style={{ marginBottom: '28px' }}>
+        <h2 style={{
+          fontSize: '0.78rem', fontWeight: 600, color: '#555',
+          letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '10px',
+        }}>
+          Position Management Logic
+        </h2>
+        <div style={{
+          background: '#080808', border: '1px solid #1a1a1a',
+          borderRadius: '6px', padding: '16px 20px',
+          fontSize: '0.73rem', lineHeight: 1.8, color: '#555',
+        }}>
+          <p style={{ marginBottom: '10px' }}>
+            <strong style={{ color: '#888' }}>RUN ROUND — uses LLM (one call per agent per round).</strong>{' '}
+            Each active agent receives the market question, description, current Polymarket YES price,
+            and its strategy profile. It returns a probability estimate, confidence, action label,
+            and rationale. If the agent&apos;s probability diverges from the market price by ≥ 10 pp,
+            a paper position is opened automatically: LONG YES if the agent thinks market is underpriced,
+            SHORT YES (long NO) if overpriced. Position size = 2% of paper wallet balance, capped at $200.
+          </p>
+          <p style={{ marginBottom: '12px' }}>
+            <strong style={{ color: '#888' }}>TICK — rule-based, zero LLM calls.</strong>{' '}
+            Fetches the current Polymarket price for every open position, then evaluates these rules
+            in strict priority order:
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '8px' }}>
+            {[
+              { label: 'expiry_exit', color: '#f59e0b', trigger: 'Market closes within 24 h',          action: 'Close position fully at current price' },
+              { label: 'stop_loss',   color: '#f87171', trigger: 'Unrealized loss ≥ 20% of cost basis', action: 'Close position fully, return funds to wallet' },
+              { label: 'scale_out',   color: '#60a5fa', trigger: 'Unrealized gain ≥ 15%, no prior trim', action: 'Sell 50% of contracts, realize partial gain' },
+              { label: 'scale_in',    color: '#4ade80', trigger: 'Edge ≥ 8%, tick ≤ 3, no prior add',   action: 'Buy 50% more at current price, blend avg entry' },
+              { label: 'hold',        color: '#444',    trigger: 'None of the above',                   action: 'Update unrealized P&L, no size change' },
+            ].map(r => (
+              <div key={r.label} style={{
+                background: '#0a0a0a', border: '1px solid #161616',
+                borderRadius: '4px', padding: '10px 12px',
+              }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: r.color, fontSize: '0.72rem' }}>{r.label}</span>
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#444', marginBottom: '2px' }}>
+                  <span style={{ color: '#3a3a3a' }}>Trigger: </span>{r.trigger}
+                </div>
+                <div style={{ fontSize: '0.65rem', color: '#444' }}>
+                  <span style={{ color: '#3a3a3a' }}>Effect: </span>{r.action}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ marginTop: '12px', fontSize: '0.68rem', color: '#3a3a3a' }}>
+            Cron runs daily at <strong style={{ color: '#444' }}>03:00 UTC</strong> (Vercel Hobby limit).
+            Use &ldquo;Run Tick Now&rdquo; above for manual execution. Each tick writes a row to
+            <code style={{ color: '#555' }}>fa_position_ticks</code> and updates{' '}
+            <code style={{ color: '#555' }}>fa_positions</code>. Closed positions return capital to the agent&apos;s
+            paper wallet.
+          </p>
+        </div>
+      </section>
+
       {/* ── API reference ── */}
       <section>
         <h2 style={{
