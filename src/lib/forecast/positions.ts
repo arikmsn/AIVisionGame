@@ -279,9 +279,14 @@ export async function tickPosition(
   let currentPrice: number;
   try {
     const mkt = await fetchMarketById(externalId);
-    const priceStr = Array.isArray(mkt.outcomePrices) ? mkt.outcomePrices[0] : null;
+    // outcomePrices may be a JSON-encoded string from the Polymarket gamma API
+    let prices = (mkt as any).outcomePrices ?? (mkt as any).outcome_prices ?? null;
+    if (typeof prices === 'string') {
+      try { prices = JSON.parse(prices); } catch { prices = null; }
+    }
+    const priceStr = Array.isArray(prices) && prices.length > 0 ? prices[0] : null;
     const parsed = priceStr != null ? parseFloat(priceStr) : NaN;
-    currentPrice = !isNaN(parsed) ? parsed : pos.current_price ?? pos.avg_entry_price;
+    currentPrice = !isNaN(parsed) ? parsed : (pos.current_price ?? pos.avg_entry_price);
   } catch {
     currentPrice = pos.current_price ?? pos.avg_entry_price;
   }

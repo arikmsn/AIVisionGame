@@ -25,10 +25,11 @@ export async function POST(request: NextRequest) {
     if (marketId) {
       marketIds = [marketId];
     } else {
-      // Auto-select top active markets by volume
+      // Auto-select top active markets by volume, filtering out extreme prices
+      // (near 0 or near 1) so agents can generate meaningful edge
       const markets = await faSelect<{ id: string; current_yes_price: number }>(
         'fa_markets',
-        `status=eq.active&order=volume_usd.desc&limit=${count ?? 3}&select=id,current_yes_price`,
+        `status=eq.active&current_yes_price=gte.0.05&current_yes_price=lte.0.95&order=volume_usd.desc&limit=${count ?? 3}&select=id,current_yes_price`,
       );
       marketIds = markets.map(m => m.id);
     }
