@@ -110,9 +110,30 @@ export function parseForecastOutput(raw: string): ForecastOutput | null {
     const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (fenceMatch) jsonStr = fenceMatch[1].trim();
 
-    // Try to find a JSON object
-    const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
-    if (braceMatch) jsonStr = braceMatch[0];
+    // Anchor extraction: find the JSON object containing "probability_yes".
+    // This handles thinking-model output (Gemini 2.5 Pro) where reasoning prose
+    // precedes the JSON and may contain { } characters that confuse a greedy
+    // /\{[\s\S]*\}/ match.
+    const probIdx = jsonStr.lastIndexOf('"probability_yes"');
+    if (probIdx >= 0) {
+      const openBrace = jsonStr.lastIndexOf('{', probIdx);
+      if (openBrace >= 0) {
+        let depth = 0;
+        let closeIdx = openBrace;
+        for (let i = openBrace; i < jsonStr.length; i++) {
+          if (jsonStr[i] === '{') depth++;
+          else if (jsonStr[i] === '}') {
+            depth--;
+            if (depth === 0) { closeIdx = i; break; }
+          }
+        }
+        jsonStr = jsonStr.slice(openBrace, closeIdx + 1);
+      }
+    } else {
+      // Fallback: greedy brace match (works when no thinking prose present)
+      const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (braceMatch) jsonStr = braceMatch[0];
+    }
 
     const parsed = JSON.parse(jsonStr);
 
