@@ -315,10 +315,20 @@ export async function tickPosition(
     const contractPrice  = pos.side === 'long' ? currentPrice : (1 - currentPrice);
     if (contractPrice > 0) {
       const addContracts = addUsd / contractPrice;
-      // Update average entry price
+      // Update average entry price.
+      // LONG : contracts are YES contracts (price = YES price)
+      //        → avg_entry = totalCost / totalContracts  (weighted avg YES price)
+      // SHORT: contracts are NO contracts (price = 1 - YES price)
+      //        → avg_entry = 1 - totalCost / totalContracts
+      //        (derives the weighted avg YES reference price from the NO side)
+      //        Formula proof: unrealized = contracts*(avg_YES - current_YES)
+      //          must equal current_NO_value - cost_basis
+      //          = contracts*(1-current) - cost  →  avg_YES = 1 - cost/contracts
       const totalCost    = pos.cost_basis_usd + addUsd;
       const totalContr   = pos.contracts + addContracts;
-      newAvgEntry        = totalCost / totalContr;
+      newAvgEntry        = pos.side === 'long'
+        ? totalCost / totalContr
+        : 1 - totalCost / totalContr;
       newContracts       = totalContr;
       newSizeUsd         = newSizeUsd + addUsd;
       newCostBasis       = totalCost;
