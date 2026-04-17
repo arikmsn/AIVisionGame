@@ -102,15 +102,22 @@ async function callGoogle(
     generationConfig: { maxOutputTokens: maxTokens },
   });
 
-  // response.text() aggregates all candidate parts (including thinking models).
-  // For safety, also try concatenating non-thought parts explicitly.
-  let text = '';
-  try { text = result.response.text().trim(); } catch { /* swallow */ }
+  // Gemini 2.5 Pro is a thinking model: response.text() concatenates ALL parts
+  // including thought=true parts, which pollutes the JSON with reasoning prose.
+  // Always prefer non-thought parts as primary source; fall back to response.text()
+  // only when there are no non-thought parts (non-thinking models).
+  const allParts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+  const nonThought = allParts.filter((p: any) => p.text && !p.thought);
+  let text = nonThought.length > 0
+    ? nonThought.map((p: any) => p.text ?? '').join('').trim()
+    : '';
   if (!text) {
-    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
-    const nonThought = parts.filter((p: any) => p.text && !p.thought);
-    text = (nonThought.length > 0 ? nonThought : parts)
-      .map((p: any) => p.text ?? '').join('').trim();
+    // Non-thinking model or empty non-thought parts — use response.text()
+    try { text = result.response.text().trim(); } catch { /* swallow */ }
+  }
+  if (!text) {
+    // Last resort: concatenate all parts
+    text = allParts.map((p: any) => p.text ?? '').join('').trim();
   }
 
   const meta = result.response.usageMetadata;
