@@ -106,7 +106,8 @@ async function callGoogle(
   // including thought=true parts, which pollutes the JSON with reasoning prose.
   // Always prefer non-thought parts as primary source; fall back to response.text()
   // only when there are no non-thought parts (non-thinking models).
-  const allParts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+  const candidate  = result.response.candidates?.[0];
+  const allParts   = (candidate?.content?.parts ?? []) as any[];
   const nonThought = allParts.filter((p: any) => p.text && !p.thought);
   let text = nonThought.length > 0
     ? nonThought.map((p: any) => p.text ?? '').join('').trim()
@@ -116,8 +117,20 @@ async function callGoogle(
     try { text = result.response.text().trim(); } catch { /* swallow */ }
   }
   if (!text) {
-    // Last resort: concatenate all parts
+    // Last resort: concatenate all parts (catches thinking-only output)
     text = allParts.map((p: any) => p.text ?? '').join('').trim();
+  }
+  if (!text) {
+    // Empty response — likely a safety block or token budget exhaustion.
+    // Throw so runner logs this as an API error with diagnostics rather than
+    // a silent parse error with raw="".
+    const finishReason   = (candidate as any)?.finishReason ?? 'unknown';
+    const safetyRatings  = JSON.stringify((candidate as any)?.safetyRatings ?? []);
+    const candidateCount = result.response.candidates?.length ?? 0;
+    throw new Error(
+      `Gemini empty response — finishReason=${finishReason} ` +
+      `candidates=${candidateCount} safety=${safetyRatings}`,
+    );
   }
 
   const meta = result.response.usageMetadata;
