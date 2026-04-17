@@ -100,46 +100,33 @@ export interface ForecastOutput {
   rationale_full:   string;
 }
 
+/**
+ * Walk a JSON string from startIdx, respecting string escaping.
+ * Returns the substring from startIdx to the matching closing brace,
+ * or null if no matching brace is found.
+ */
+function extractJsonObject(s: string, startIdx: number): string | null {
+  let depth    = 0;
+  let inString = false;
+  let escape   = false;
+
+  for (let i = startIdx; i < s.length; i++) {
+    const c = s[i];
+    if (escape)              { escape = false; continue; }
+    if (c === '\\' && inString) { escape = true;  continue; }
+    if (c === '"')           { inString = !inString; continue; }
+    if (inString)            { continue; }
+    if      (c === '{')      { depth++; }
+    else if (c === '}')      { depth--; if (depth === 0) return s.slice(startIdx, i + 1); }
+  }
+  return null;
+}
+
 /** Parse model output into structured forecast, with fallbacks */
 export function parseForecastOutput(raw: string): ForecastOutput | null {
-  try {
-    // Try to find JSON in the response
-    let jsonStr = raw.trim();
-
-    // Strip markdown code fences if present
-    const fenceMatch = jsonStr.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-    if (fenceMatch) jsonStr = fenceMatch[1].trim();
-
-    // Anchor extraction: find the JSON object containing "probability_yes".
-    // This handles thinking-model output (Gemini 2.5 Pro) where reasoning prose
-    // precedes the JSON and may contain { } characters that confuse a greedy
-    // /\{[\s\S]*\}/ match.
-    const probIdx = jsonStr.lastIndexOf('"probability_yes"');
-    if (probIdx >= 0) {
-      const openBrace = jsonStr.lastIndexOf('{', probIdx);
-      if (openBrace >= 0) {
-        let depth = 0;
-        let closeIdx = openBrace;
-        for (let i = openBrace; i < jsonStr.length; i++) {
-          if (jsonStr[i] === '{') depth++;
-          else if (jsonStr[i] === '}') {
-            depth--;
-            if (depth === 0) { closeIdx = i; break; }
-          }
-        }
-        jsonStr = jsonStr.slice(openBrace, closeIdx + 1);
-      }
-    } else {
-      // Fallback: greedy brace match (works when no thinking prose present)
-      const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (braceMatch) jsonStr = braceMatch[0];
-    }
-
-    const parsed = JSON.parse(jsonStr);
-
+  const buildResult = (parsed: any): ForecastOutput | null => {
     const prob = Number(parsed.probability_yes);
     if (isNaN(prob) || prob < 0 || prob > 1) return null;
-
     return {
       probability_yes: Math.max(0.01, Math.min(0.99, prob)),
       confidence:      Math.max(0, Math.min(1, Number(parsed.confidence) || 0.5)),
@@ -147,7 +134,40 @@ export function parseForecastOutput(raw: string): ForecastOutput | null {
       rationale_short: String(parsed.rationale_short || '').slice(0, 500),
       rationale_full:  String(parsed.rationale_full || '').slice(0, 5000),
     };
-  } catch {
-    return null;
+  };
+
+  const s = raw.trim();
+
+  // Try 1: direct parse (clean JSON response)
+  try { return buildResult(JSON.parse(s)); } catch { /* continue */ }
+
+  // Try 2: anchor on "probability_yes" in original text, using string-escape-aware
+  // brace scanner. Works even when thinking prose contains { } or rationale has
+  // backtick sequences that would fool a fence-strip regex.
+  const probIdx = s.lastIndexOf('"probability_yes"');
+  if (probIdx >= 0) {
+    const openBrace = s.lastIndexOf('{', probIdx);
+    if (openBrace >= 0) {
+      const candidate = extractJsonObject(s, openBrace);
+      if (candidate) {
+        try { return buildResult(JSON.parse(candidate)); } catch { /* continue */ }
+      }
+    }
   }
+
+  // Try 3: strip markdown code fences (handles ` ```json ... ``` ` output)
+  // Use greedy inner match so inner backtick sequences in rationale_full don't
+  // truncate the capture prematurely — then parse or re-anchor inside.
+  const fenceMatch = s.match(/```(?:json)?[\s\S]*?({[\s\S]*})[\s\S]*?```/);
+  if (fenceMatch?.[1]) {
+    try { return buildResult(JSON.parse(fenceMatch[1])); } catch { /* continue */ }
+  }
+
+  // Try 4: greedy brace match as last resort
+  const braceMatch = s.match(/\{[\s\S]*\}/);
+  if (braceMatch) {
+    try { return buildResult(JSON.parse(braceMatch[0])); } catch { /* continue */ }
+  }
+
+  return null;
 }
