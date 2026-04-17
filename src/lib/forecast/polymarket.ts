@@ -92,20 +92,14 @@ function extractExternalId(m: any): string {
 }
 
 function extractYesPrice(m: any): number | null {
-  // Try outcomePrices array
-  if (m.outcomePrices && Array.isArray(m.outcomePrices) && m.outcomePrices.length > 0) {
-    const p = parseFloat(m.outcomePrices[0]);
-    if (!isNaN(p)) return p;
+  // Try outcomePrices — may be a real array or a JSON-encoded string
+  let prices = m.outcomePrices ?? m.outcome_prices ?? null;
+  if (typeof prices === 'string') {
+    try { prices = JSON.parse(prices); } catch { prices = null; }
   }
-  // Try outcome_prices string
-  if (typeof m.outcome_prices === 'string') {
-    try {
-      const arr = JSON.parse(m.outcome_prices);
-      if (Array.isArray(arr) && arr.length > 0) {
-        const p = parseFloat(arr[0]);
-        if (!isNaN(p)) return p;
-      }
-    } catch { /* ignore */ }
+  if (Array.isArray(prices) && prices.length > 0) {
+    const p = parseFloat(prices[0]);
+    if (!isNaN(p)) return p;
   }
   // Try tokens array
   if (Array.isArray(m.tokens)) {
