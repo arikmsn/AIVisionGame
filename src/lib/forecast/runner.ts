@@ -2,28 +2,19 @@
  * Forecast Arena — Agent Runner
  *
  * Runs a single agent against a round's market context.
- * Calls Anthropic or OpenAI, parses output, persists to DB.
+ * Supports all 5 providers used in the main idiom arena:
+ *   anthropic, openai, xai (OpenAI-compat), google, openrouter (OpenAI-compat)
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { faInsert, faSelect } from './db';
 import { buildSystemPrompt, buildUserMessage, parseForecastOutput, type MarketContext } from './prompts';
 import { FORECAST_AGENTS } from './agents';
+import { getModelConfig, estimateCost, type ForecastProvider } from './registry';
 
-// ── Cost estimates (per 1M tokens) ──────────────────────────────────────────
-
-const COST_PER_M: Record<string, { input: number; output: number }> = {
-  'claude-haiku-4-5': { input: 0.80, output: 4.00 },
-  'gpt-4o-mini':      { input: 0.15, output: 0.60 },
-};
-
-function estimateCost(modelId: string, inputTokens: number, outputTokens: number): number {
-  const rates = COST_PER_M[modelId] ?? { input: 1.0, output: 3.0 };
-  return (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
-}
-
-// ── Provider callers ─────────────────────────────────────────────────────────
+// ── Provider response ─────────────────────────────────────────────────────────
 
 interface ModelResponse {
   text:         string;
@@ -32,22 +23,24 @@ interface ModelResponse {
   latencyMs:    number;
 }
 
+// ── Provider callers ──────────────────────────────────────────────────────────
+
 async function callAnthropic(
-  modelId: string,
+  modelId:      string,
   systemPrompt: string,
-  userMessage: string,
+  userMessage:  string,
+  maxTokens:    number,
 ): Promise<ModelResponse> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const start = Date.now();
+  const start  = Date.now();
 
   const response = await client.messages.create({
     model:      modelId,
-    max_tokens: 1500,
+    max_tokens: maxTokens,
     system:     systemPrompt,
     messages:   [{ role: 'user', content: userMessage }],
   });
 
-  const latencyMs = Date.now() - start;
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map(b => b.text)
@@ -55,41 +48,115 @@ async function callAnthropic(
 
   return {
     text,
-    inputTokens:  response.usage?.input_tokens ?? 0,
+    inputTokens:  response.usage?.input_tokens  ?? 0,
     outputTokens: response.usage?.output_tokens ?? 0,
-    latencyMs,
+    latencyMs:    Date.now() - start,
   };
 }
 
-async function callOpenAI(
-  modelId: string,
+async function callOpenAICompat(
+  modelId:      string,
   systemPrompt: string,
-  userMessage: string,
+  userMessage:  string,
+  maxTokens:    number,
+  apiKey:       string | undefined,
+  baseURL?:     string,
 ): Promise<ModelResponse> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const start = Date.now();
+  const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  const start  = Date.now();
 
   const response = await client.chat.completions.create({
     model:      modelId,
-    max_tokens: 1500,
+    max_tokens: maxTokens,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user',   content: userMessage },
+      { role: 'user',   content: userMessage  },
     ],
   });
 
-  const latencyMs = Date.now() - start;
-  const text = response.choices[0]?.message?.content ?? '';
-
   return {
-    text,
-    inputTokens:  response.usage?.prompt_tokens ?? 0,
+    text:         response.choices[0]?.message?.content ?? '',
+    inputTokens:  response.usage?.prompt_tokens     ?? 0,
     outputTokens: response.usage?.completion_tokens ?? 0,
-    latencyMs,
+    latencyMs:    Date.now() - start,
   };
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+async function callGoogle(
+  modelId:      string,
+  systemPrompt: string,
+  userMessage:  string,
+  maxTokens:    number,
+): Promise<ModelResponse> {
+  const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '');
+  const model = genAI.getGenerativeModel({ model: modelId });
+  const start = Date.now();
+
+  const result = await model.generateContent({
+    contents: [{ role: 'user', parts: [{ text: `${systemPrompt}\n\n${userMessage}` }] }],
+    generationConfig: { maxOutputTokens: maxTokens },
+  });
+
+  let text = result.response.text().trim();
+  if (!text) {
+    // Gemini thinking models surface output inside parts
+    const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
+    text = parts.find((p: any) => p.text && !p.thought)?.text?.trim()
+        ?? parts.find((p: any) => p.text)?.text?.trim()
+        ?? '';
+  }
+
+  const meta = result.response.usageMetadata;
+  return {
+    text,
+    inputTokens:  meta?.promptTokenCount     ?? 0,
+    outputTokens: meta?.candidatesTokenCount ?? 0,
+    latencyMs:    Date.now() - start,
+  };
+}
+
+// ── Provider dispatch ─────────────────────────────────────────────────────────
+
+async function callModel(
+  provider:     ForecastProvider | string,
+  modelId:      string,
+  systemPrompt: string,
+  userMessage:  string,
+  maxTokens:    number,
+): Promise<ModelResponse> {
+  switch (provider) {
+    case 'anthropic':
+      return callAnthropic(modelId, systemPrompt, userMessage, maxTokens);
+
+    case 'openai':
+      return callOpenAICompat(
+        modelId, systemPrompt, userMessage, maxTokens,
+        process.env.OPENAI_API_KEY,
+      );
+
+    case 'xai':
+      return callOpenAICompat(
+        modelId, systemPrompt, userMessage, maxTokens,
+        process.env.XAI_API_KEY,
+        'https://api.x.ai/v1',
+      );
+
+    case 'openrouter':
+      return callOpenAICompat(
+        modelId, systemPrompt, userMessage, maxTokens,
+        process.env.OPENROUTER_API_KEY,
+        'https://openrouter.ai/api/v1',
+      );
+
+    case 'google':
+      return callGoogle(modelId, systemPrompt, userMessage, maxTokens);
+
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
+  }
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
 
 export interface SubmissionResult {
   success:         boolean;
@@ -105,30 +172,25 @@ export interface SubmissionResult {
 
 export async function runAgentOnRound(
   agentSlug: string,
-  roundId: string,
+  roundId:   string,
 ): Promise<SubmissionResult> {
-  const agentConfig = FORECAST_AGENTS.find(a => a.slug === agentSlug);
-  if (!agentConfig) {
-    return { success: false, agentSlug, error: `Unknown agent: ${agentSlug}` };
-  }
+  // 1. Get agent DB record (source of truth for model_id / provider)
+  const agents = await faSelect<{
+    id: string; model_id: string; provider: string; strategy_profile_json: any;
+  }>('fa_agents', `slug=eq.${agentSlug}&select=id,model_id,provider,strategy_profile_json`);
 
-  // 1. Get agent DB record
-  const agents = await faSelect<{ id: string; strategy_profile_json: any }>(
-    'fa_agents',
-    `slug=eq.${agentSlug}&select=id,strategy_profile_json`,
-  );
   if (agents.length === 0) {
     return { success: false, agentSlug, error: `Agent ${agentSlug} not found in DB` };
   }
-  const agentDbId = agents[0].id;
-  const strategy = agents[0].strategy_profile_json?.strategy ?? agentConfig.strategy;
+  const agentDb   = agents[0];
+  const modelId   = agentDb.model_id;
+  const provider  = agentDb.provider;
+  const strategy  = agentDb.strategy_profile_json?.strategy ?? 'balanced';
+  const maxTokens = getModelConfig(modelId)?.maxTokens ?? 1500;
 
   // 2. Get round + market context
   const rounds = await faSelect<{
-    id: string;
-    market_id: string;
-    market_yes_price_at_open: number;
-    context_json: any;
+    id: string; market_id: string; market_yes_price_at_open: number; context_json: any;
   }>('fa_rounds', `id=eq.${roundId}&select=id,market_id,market_yes_price_at_open,context_json`);
 
   if (rounds.length === 0) {
@@ -146,13 +208,12 @@ export async function runAgentOnRound(
   }
   const market = markets[0];
 
-  // Get recent snapshots
   const snapshots = await faSelect<{ timestamp: string; yes_price: number }>(
     'fa_market_snapshots',
     `market_id=eq.${round.market_id}&select=timestamp,yes_price&order=timestamp.desc&limit=5`,
   );
 
-  // 3. Build prompt
+  // 3. Build prompts
   const ctx: MarketContext = {
     title:           market.title,
     description:     market.description ?? '',
@@ -164,26 +225,21 @@ export async function runAgentOnRound(
   };
 
   const systemPrompt = buildSystemPrompt(strategy);
-  const userMessage = buildUserMessage(ctx);
+  const userMessage  = buildUserMessage(ctx);
 
   // 4. Call model
   let response: ModelResponse;
   try {
-    if (agentConfig.provider === 'anthropic') {
-      response = await callAnthropic(agentConfig.model_id, systemPrompt, userMessage);
-    } else {
-      response = await callOpenAI(agentConfig.model_id, systemPrompt, userMessage);
-    }
+    response = await callModel(provider, modelId, systemPrompt, userMessage, maxTokens);
   } catch (err: any) {
     const errorText = err?.message ?? String(err);
-    console.error(`[FA/RUNNER] ${agentSlug} API error: ${errorText}`);
+    console.error(`[FA/RUNNER] ${agentSlug} (${provider}/${modelId}) API error: ${errorText}`);
 
-    // Insert error submission
     await faInsert('fa_submissions', [{
-      round_id:    roundId,
-      agent_id:    agentDbId,
-      probability_yes: 0.5, // neutral default on error
-      error_text:  errorText.slice(0, 2000),
+      round_id:        roundId,
+      agent_id:        agentDb.id,
+      probability_yes: 0.5,
+      error_text:      errorText.slice(0, 2000),
     }]);
 
     await faInsert('fa_audit_events', [{
@@ -191,22 +247,22 @@ export async function runAgentOnRound(
       entity_type:  'submission',
       entity_id:    roundId,
       actor:        agentSlug,
-      payload_json: { error: errorText.slice(0, 500), model: agentConfig.model_id },
+      payload_json: { error: errorText.slice(0, 500), model: modelId, provider },
     }]);
 
     return { success: false, agentSlug, error: errorText };
   }
 
   // 5. Parse output
-  const parsed = parseForecastOutput(response.text);
-  const costUsd = estimateCost(agentConfig.model_id, response.inputTokens, response.outputTokens);
+  const parsed  = parseForecastOutput(response.text);
+  const costUsd = estimateCost(modelId, response.inputTokens, response.outputTokens);
 
   if (!parsed) {
     console.error(`[FA/RUNNER] ${agentSlug} parse error. Raw: ${response.text.slice(0, 300)}`);
 
     await faInsert('fa_submissions', [{
       round_id:        roundId,
-      agent_id:        agentDbId,
+      agent_id:        agentDb.id,
       probability_yes: 0.5,
       raw_output_json: { raw: response.text.slice(0, 3000) },
       input_tokens:    response.inputTokens,
@@ -219,10 +275,10 @@ export async function runAgentOnRound(
     return { success: false, agentSlug, error: 'Parse error', latencyMs: response.latencyMs, costUsd };
   }
 
-  // 6. Insert submission
+  // 6. Persist submission
   const submissionRows = await faInsert('fa_submissions', [{
     round_id:         roundId,
-    agent_id:         agentDbId,
+    agent_id:         agentDb.id,
     probability_yes:  parsed.probability_yes,
     confidence:       parsed.confidence,
     action:           parsed.action,
@@ -247,19 +303,21 @@ export async function runAgentOnRound(
     entity_id:    submissionId ?? roundId,
     actor:        agentSlug,
     payload_json: {
-      model:          agentConfig.model_id,
-      probability:    parsed.probability_yes,
-      action:         parsed.action,
-      latency_ms:     response.latencyMs,
-      cost_usd:       costUsd,
-      input_tokens:   response.inputTokens,
-      output_tokens:  response.outputTokens,
+      model:         modelId,
+      provider,
+      probability:   parsed.probability_yes,
+      action:        parsed.action,
+      latency_ms:    response.latencyMs,
+      cost_usd:      costUsd,
+      input_tokens:  response.inputTokens,
+      output_tokens: response.outputTokens,
     },
   }]);
 
   console.log(
-    `[FA/RUNNER] ${agentSlug} submitted: P(yes)=${parsed.probability_yes.toFixed(3)} ` +
-    `action=${parsed.action} latency=${response.latencyMs}ms cost=$${costUsd.toFixed(5)}`,
+    `[FA/RUNNER] ${agentSlug} (${provider}/${modelId}) ` +
+    `P(yes)=${parsed.probability_yes.toFixed(3)} action=${parsed.action} ` +
+    `latency=${response.latencyMs}ms cost=$${costUsd.toFixed(5)}`,
   );
 
   return {
@@ -275,7 +333,9 @@ export async function runAgentOnRound(
 }
 
 /**
- * Run all active agents on a round, in parallel.
+ * Run all active agents on a round in parallel.
+ * Active agents are determined by fa_agents.is_active = true in the DB.
+ * Toggle is_active in the DB to include/exclude any agent without a deploy.
  */
 export async function runAllAgentsOnRound(roundId: string): Promise<SubmissionResult[]> {
   const agents = await faSelect<{ slug: string }>(
@@ -288,7 +348,7 @@ export async function runAllAgentsOnRound(roundId: string): Promise<SubmissionRe
     return [];
   }
 
-  console.log(`[FA/RUNNER] Running ${agents.length} agents on round ${roundId}`);
+  console.log(`[FA/RUNNER] Running ${agents.length} active agents on round ${roundId}`);
 
   const results = await Promise.all(
     agents.map(a => runAgentOnRound(a.slug, roundId)),
