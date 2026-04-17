@@ -122,6 +122,93 @@ function extractJsonObject(s: string, startIdx: number): string | null {
   return null;
 }
 
+/**
+ * Escape literal control characters (newlines, tabs, carriage returns) that
+ * appear inside JSON string values. LLMs sometimes emit these verbatim inside
+ * quoted values, making JSON.parse throw a SyntaxError even when the overall
+ * structure is valid. This walks the string character-by-character, tracking
+ * whether we're inside a JSON string, and escapes any bare control chars found
+ * there.
+ */
+function normalizeJsonControlChars(s: string): string {
+  const out: string[] = [];
+  let inString = false;
+  let escape   = false;
+
+  for (let i = 0; i < s.length; i++) {
+    const c  = s[i];
+    const cc = s.charCodeAt(i);
+
+    if (escape) {
+      out.push(c);
+      escape = false;
+      continue;
+    }
+    if (c === '\\' && inString) {
+      out.push(c);
+      escape = true;
+      continue;
+    }
+    if (c === '"') {
+      inString = !inString;
+      out.push(c);
+      continue;
+    }
+    // Escape literal control characters only while inside a string value
+    if (inString && cc < 0x20) {
+      if      (cc === 0x0a) { out.push('\\n');  continue; }  // LF
+      else if (cc === 0x0d) { out.push('\\r');  continue; }  // CR
+      else if (cc === 0x09) { out.push('\\t');  continue; }  // TAB
+      else                  { out.push(`\\u${cc.toString(16).padStart(4, '0')}`); continue; }
+    }
+    out.push(c);
+  }
+  return out.join('');
+}
+
+/**
+ * Field-by-field regex extraction — last resort when JSON is too malformed to
+ * parse even after normalization. Extracts each scalar field independently.
+ */
+function extractFieldsRegex(s: string): ForecastOutput | null {
+  const probMatch  = s.match(/"probability_yes"\s*:\s*([0-9.]+)/);
+  if (!probMatch) return null;
+  const prob = Number(probMatch[1]);
+  if (isNaN(prob) || prob < 0 || prob > 1) return null;
+
+  const confMatch  = s.match(/"confidence"\s*:\s*([0-9.]+)/);
+  const actMatch   = s.match(/"action"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/);
+  const shortMatch = s.match(/"rationale_short"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/);
+
+  // rationale_full can be long — grab everything between its opening quote and
+  // the next unescaped quote followed by a comma or closing brace.
+  let rationaleFull = '';
+  const rfIdx = s.indexOf('"rationale_full"');
+  if (rfIdx >= 0) {
+    const valStart = s.indexOf('"', rfIdx + '"rationale_full"'.length + 1);
+    if (valStart >= 0) {
+      let end = valStart + 1;
+      let esc = false;
+      while (end < s.length) {
+        if (esc)        { esc = false; }
+        else if (s[end] === '\\') { esc = true; }
+        else if (s[end] === '"') { break; }
+        end++;
+      }
+      rationaleFull = s.slice(valStart + 1, end)
+        .replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/\\t/g, '\t');
+    }
+  }
+
+  return {
+    probability_yes: Math.max(0.01, Math.min(0.99, prob)),
+    confidence:      Math.max(0, Math.min(1, Number(confMatch?.[1]) || 0.5)),
+    action:          String(actMatch?.[1] || 'hold'),
+    rationale_short: String(shortMatch?.[1] || '').slice(0, 500),
+    rationale_full:  rationaleFull.slice(0, 5000),
+  };
+}
+
 /** Parse model output into structured forecast, with fallbacks */
 export function parseForecastOutput(raw: string): ForecastOutput | null {
   const buildResult = (parsed: any): ForecastOutput | null => {
@@ -150,7 +237,10 @@ export function parseForecastOutput(raw: string): ForecastOutput | null {
     if (openBrace >= 0) {
       const candidate = extractJsonObject(s, openBrace);
       if (candidate) {
+        // Try 2a: direct parse
         try { return buildResult(JSON.parse(candidate)); } catch { /* continue */ }
+        // Try 2b: normalize literal control chars then parse
+        try { return buildResult(JSON.parse(normalizeJsonControlChars(candidate))); } catch { /* continue */ }
       }
     }
   }
@@ -161,13 +251,16 @@ export function parseForecastOutput(raw: string): ForecastOutput | null {
   const fenceMatch = s.match(/```(?:json)?[\s\S]*?({[\s\S]*})[\s\S]*?```/);
   if (fenceMatch?.[1]) {
     try { return buildResult(JSON.parse(fenceMatch[1])); } catch { /* continue */ }
+    try { return buildResult(JSON.parse(normalizeJsonControlChars(fenceMatch[1]))); } catch { /* continue */ }
   }
 
-  // Try 4: greedy brace match as last resort
+  // Try 4: greedy brace match + normalize
   const braceMatch = s.match(/\{[\s\S]*\}/);
   if (braceMatch) {
     try { return buildResult(JSON.parse(braceMatch[0])); } catch { /* continue */ }
+    try { return buildResult(JSON.parse(normalizeJsonControlChars(braceMatch[0]))); } catch { /* continue */ }
   }
 
-  return null;
+  // Try 5: field-by-field regex extraction — handles deeply malformed JSON
+  return extractFieldsRegex(s);
 }
