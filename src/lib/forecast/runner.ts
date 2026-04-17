@@ -105,13 +105,14 @@ async function callGoogle(
     },
   });
 
-  // For thinking models, non-thought parts hold the final answer
-  let text = '';
+  // For thinking models, the JSON answer may be split across multiple parts.
+  // Concatenate all non-thought text parts; fall back to the full text() response.
   const parts = (result.response.candidates?.[0]?.content?.parts ?? []) as any[];
-  text = parts.find((p: any) => p.text && !p.thought)?.text?.trim()
-      ?? parts.find((p: any) => p.text)?.text?.trim()
-      ?? result.response.text?.()?.trim()
-      ?? '';
+  const nonThoughtParts = parts.filter((p: any) => p.text && !p.thought);
+  let text = nonThoughtParts.length > 0
+    ? nonThoughtParts.map((p: any) => p.text).join('')
+    : (result.response.text?.() ?? '');
+  text = text.trim();
 
   const meta = result.response.usageMetadata;
   return {
