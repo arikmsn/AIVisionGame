@@ -99,7 +99,7 @@ export function currentPositionValue(
 
 // ── Edge detection (should we open a position?) ───────────────────────────────
 
-const MIN_EDGE_TO_OPEN    = 0.05;   // 5% probability edge (temporarily lowered for testing)
+const MIN_EDGE_TO_OPEN    = 0.10;   // 10% probability edge
 const POSITION_SIZE_PCT   = 0.02;   // 2% of wallet per position
 const MAX_POSITION_USD    = 200;    // hard cap per position
 const MIN_POSITION_USD    = 5;      // don't open below this
