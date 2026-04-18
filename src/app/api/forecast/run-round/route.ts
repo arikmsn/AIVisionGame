@@ -10,8 +10,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runAllAgentsOnRound } from '@/lib/forecast/runner';
 import { faPatch, faSelect } from '@/lib/forecast/db';
-import { openPosition } from '@/lib/forecast/positions';
-import { shouldOpenPosition } from '@/lib/forecast/positions';
+import { openPosition, shouldOpenPosition } from '@/lib/forecast/positions';
 
 export const maxDuration = 120;
 
@@ -49,9 +48,11 @@ export async function POST(request: NextRequest) {
     const marketPrice = Number(rounds[0]?.market_yes_price_at_open ?? 0);
 
     const positionResults: Array<{
-      agent: string;
-      positionId: string | null;
-      side?: string;
+      agent:             string;
+      positionId:        string | null;
+      side?:             string;
+      edge?:             number;
+      noPositionReason?: string;
     }> = [];
 
     // Load central bankroll balance once — shared across all agents
