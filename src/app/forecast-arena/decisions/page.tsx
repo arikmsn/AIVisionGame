@@ -69,7 +69,7 @@ export default async function DecisionsPage({
 }: {
   searchParams?: Promise<{ page?: string }>;
 }) {
-  const sp       = await (searchParams ?? Promise.resolve({}));
+  const sp       = await (searchParams ?? Promise.resolve({} as { page?: string }));
   const page     = Math.max(1, Number(sp.page ?? 1));
   const pageSize = 10;
   const offset   = (page - 1) * pageSize;
