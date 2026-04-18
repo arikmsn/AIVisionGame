@@ -387,6 +387,12 @@ const MIGRATION_015 = [
    LEFT JOIN fa_market_context mc ON mc.market_id = m.id`,
 ];
 
+// ── Migration 016: Add provider column to fa_market_context ──────────────────
+
+const MIGRATION_016 = [
+  `ALTER TABLE fa_market_context ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'thenewsapi'`,
+];
+
 async function executeSql(sql: string, url: string, key: string): Promise<{ ok: boolean; error?: string }> {
   // Use Supabase's pg endpoint via the Management API isn't available,
   // so we use the RPC approach: create a temporary function
@@ -425,6 +431,7 @@ export async function POST(request: NextRequest) {
     all:   MIGRATION_STATEMENTS,
     '014': MIGRATION_014,
     '015': MIGRATION_015,
+    '016': MIGRATION_016,
   };
   const statements = statementsMap[migration] ?? MIGRATION_STATEMENTS;
   const fullSql = statements.join(';\n\n') + ';';

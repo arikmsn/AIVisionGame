@@ -7,8 +7,22 @@
  */
 
 import { sfetch } from '@/lib/forecast/db';
+import { getActiveProvider, type NewsProvider } from '@/lib/forecast/news-context';
 
 export const dynamic = 'force-dynamic';
+
+const PROVIDER_LABELS: Record<NewsProvider, string> = {
+  thenewsapi: 'TheNewsAPI',
+  worldnews:  'WorldNewsAPI',
+  marketaux:  'Marketaux',
+  mediastack: 'Mediastack',
+};
+const PROVIDER_KEY_ENV: Record<NewsProvider, string> = {
+  thenewsapi: 'NEWS_API_KEY',
+  worldnews:  'WORLDNEWS_API_KEY',
+  marketaux:  'MARKETAUX_API_KEY',
+  mediastack: 'MEDIASTACK_API_KEY',
+};
 
 const TH: React.CSSProperties = {
   padding: '6px 12px', textAlign: 'left', color: '#3a3a3a',
@@ -35,16 +49,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default async function AdminPage() {
-  let markets:     any[] = [];
-  let rounds:      any[] = [];
-  let submissions: any[] = [];
-  let agents:      any[] = [];
-  let scores:      any[] = [];
-  let syncJobs:    any[] = [];
-  let auditEvents: any[] = [];
+  let markets:        any[] = [];
+  let rounds:         any[] = [];
+  let submissions:    any[] = [];
+  let agents:         any[] = [];
+  let scores:         any[] = [];
+  let syncJobs:       any[] = [];
+  let auditEvents:    any[] = [];
+  let marketContexts: any[] = [];
+
+  const activeProvider    = getActiveProvider();
+  const activeProviderKey = PROVIDER_KEY_ENV[activeProvider];
+  const activeKeyPresent  = !!process.env[activeProviderKey];
 
   try {
-    [markets, rounds, submissions, agents, scores, syncJobs, auditEvents] = await Promise.all([
+    [markets, rounds, submissions, agents, scores, syncJobs, auditEvents, marketContexts] = await Promise.all([
       sfetch('fa_markets?select=id,status').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_rounds?select=id,status,opened_at').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_submissions?select=id,cost_usd,error_text,agent_id,submitted_at&limit=2000').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
@@ -52,8 +71,13 @@ export default async function AdminPage() {
       sfetch('fa_scores?select=id,brier_score').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_sync_jobs?select=*&order=started_at.desc&limit=10').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_audit_events?select=*&order=created_at.desc&limit=40').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+      sfetch('fa_market_context?select=market_id,last_updated_at,provider').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
     ]);
   } catch { /* ok */ }
+
+  // News context stats
+  const todayIso = new Date(); todayIso.setHours(0, 0, 0, 0);
+  const contextsToday = marketContexts.filter((c: any) => new Date(c.last_updated_at) >= todayIso).length;
 
   const agentMap = new Map(agents.map((a: any) => [a.id, a]));
 
@@ -117,6 +141,67 @@ export default async function AdminPage() {
               {card.sub && <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>{card.sub}</div>}
             </div>
           ))}
+        </div>
+      </Section>
+
+      {/* ── News Context ── */}
+      <Section title="הקשר חדשותי (News Context)">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
+          {/* Active provider badge */}
+          <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 140px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ספק פעיל</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: activeKeyPresent ? '#4ade80' : '#f87171', marginTop: '4px' }}>
+              {PROVIDER_LABELS[activeProvider]}
+            </div>
+            <div style={{ fontSize: '0.58rem', color: activeKeyPresent ? '#2d6a4f' : '#7f1d1d', marginTop: '2px' }}>
+              {activeKeyPresent ? `${activeProviderKey} ✓` : `${activeProviderKey} חסר`}
+            </div>
+          </div>
+          {/* Markets with context */}
+          <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>שווקים עם הקשר</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>{marketContexts.length}</div>
+          </div>
+          {/* Refreshed today */}
+          <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>עדכונים היום</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>{contextsToday}</div>
+            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>~קריאות API</div>
+          </div>
+          {/* Cache hours */}
+          <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>מטמון</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>8h</div>
+            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>תוקף כניסה</div>
+          </div>
+        </div>
+        {/* Provider key status grid */}
+        <div style={{ background: '#090909', border: '1px solid #141414', borderRadius: '5px', padding: '10px 14px' }}>
+          <div style={{ fontSize: '0.58rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>מפתחות API</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {(['thenewsapi', 'worldnews', 'marketaux', 'mediastack'] as NewsProvider[]).map(p => {
+              const envKey = PROVIDER_KEY_ENV[p];
+              const present = !!process.env[envKey];
+              const isActive = p === activeProvider;
+              return (
+                <div key={p} style={{
+                  padding: '5px 10px', borderRadius: '4px', fontSize: '0.65rem', fontFamily: 'monospace',
+                  border: `1px solid ${isActive ? '#3a3a3a' : '#1a1a1a'}`,
+                  background: isActive ? '#111' : '#0a0a0a',
+                  color: present ? '#4ade80' : '#3a3a3a',
+                }}>
+                  {isActive && <span style={{ color: '#fbbf24', marginRight: '4px' }}>★</span>}
+                  {PROVIDER_LABELS[p]}
+                  <span style={{ marginLeft: '6px', color: present ? '#2d6a4f' : '#3a3a3a' }}>
+                    {present ? '✓' : '✗'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: '0.58rem', color: '#2e2e2e', marginTop: '8px', fontFamily: 'monospace' }}>
+            לשנות ספק: NEWS_API_PROVIDER = thenewsapi | worldnews | marketaux | mediastack
+          </div>
         </div>
       </Section>
 
