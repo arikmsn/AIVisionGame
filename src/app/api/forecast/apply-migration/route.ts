@@ -249,6 +249,48 @@ const MIGRATION_STATEMENTS = [
   `INSERT INTO fa_seasons (name, status, starts_at) SELECT 'Season 1', 'active', now() WHERE NOT EXISTS (SELECT 1 FROM fa_seasons WHERE name = 'Season 1')`,
 ];
 
+// ── Migration 014: Central Bankroll ──────────────────────────────────────────
+
+const MIGRATION_014 = [
+  `CREATE TABLE IF NOT EXISTS fa_central_bankroll (
+    id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    total_deposit_usd   numeric(14,2) NOT NULL DEFAULT 60000.00,
+    available_usd       numeric(14,2) NOT NULL DEFAULT 60000.00,
+    allocated_usd       numeric(14,2) NOT NULL DEFAULT 0.00,
+    total_realized_pnl  numeric(14,4) NOT NULL DEFAULT 0.00,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE fa_central_bankroll ENABLE ROW LEVEL SECURITY`,
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'fa_central_bankroll_service' AND tablename = 'fa_central_bankroll') THEN
+      CREATE POLICY fa_central_bankroll_service ON fa_central_bankroll FOR ALL TO service_role USING (true) WITH CHECK (true);
+    END IF;
+  END $$`,
+  `INSERT INTO fa_central_bankroll (total_deposit_usd, available_usd, allocated_usd, total_realized_pnl)
+   SELECT
+     60000.00,
+     GREATEST(60000.00 - COALESCE((SELECT SUM(cost_basis_usd) FROM fa_positions WHERE status = 'open'), 0) + COALESCE((SELECT SUM(pnl_usd) FROM fa_transactions WHERE pnl_usd IS NOT NULL), 0), 0),
+     COALESCE((SELECT SUM(cost_basis_usd) FROM fa_positions WHERE status = 'open'), 0),
+     COALESCE((SELECT SUM(pnl_usd) FROM fa_transactions WHERE pnl_usd IS NOT NULL), 0)
+   WHERE NOT EXISTS (SELECT 1 FROM fa_central_bankroll)`,
+  `CREATE OR REPLACE VIEW fa_v_finance AS
+   SELECT cb.id, cb.total_deposit_usd, cb.available_usd, cb.allocated_usd, cb.total_realized_pnl,
+     COALESCE(pos.total_unrealized_pnl, 0) AS total_unrealized_pnl,
+     COALESCE(pos.open_position_count, 0)  AS open_position_count,
+     COALESCE(pos.closed_position_count, 0) AS closed_position_count,
+     cb.total_deposit_usd + cb.total_realized_pnl + COALESCE(pos.total_unrealized_pnl, 0) AS net_value_usd,
+     cb.updated_at
+   FROM fa_central_bankroll cb
+   LEFT JOIN (
+     SELECT
+       SUM(CASE WHEN status = 'open'   THEN unrealized_pnl ELSE 0 END) AS total_unrealized_pnl,
+       COUNT(CASE WHEN status = 'open'   THEN 1 END) AS open_position_count,
+       COUNT(CASE WHEN status = 'closed' THEN 1 END) AS closed_position_count
+     FROM fa_positions
+   ) pos ON true`,
+];
+
 async function executeSql(sql: string, url: string, key: string): Promise<{ ok: boolean; error?: string }> {
   // Use Supabase's pg endpoint via the Management API isn't available,
   // so we use the RPC approach: create a temporary function
@@ -280,13 +322,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // This endpoint returns the full migration SQL for manual execution
-  // in the Supabase SQL editor, since we can't execute DDL via REST API.
-  const fullSql = MIGRATION_STATEMENTS.join(';\n\n') + ';';
+  const body = await request.json().catch(() => ({}));
+  const migration = (body as any).migration ?? 'all';
+
+  const statementsMap: Record<string, string[]> = {
+    all:  MIGRATION_STATEMENTS,
+    '014': MIGRATION_014,
+  };
+  const statements = statementsMap[migration] ?? MIGRATION_STATEMENTS;
+  const fullSql = statements.join(';\n\n') + ';';
 
   return NextResponse.json({
-    message: 'Migration SQL generated. Copy the sql field and execute it in the Supabase SQL Editor at https://supabase.com/dashboard/project/aciqrjgcnrxhmywlkkqb/sql/new',
-    statementCount: MIGRATION_STATEMENTS.length,
+    message: `Migration SQL for "${migration}" generated. Paste the sql field into the Supabase SQL Editor: https://supabase.com/dashboard/project/aciqrjgcnrxhmywlkkqb/sql/new`,
+    statementCount: statements.length,
+    migration,
     sql: fullSql,
   });
 }

@@ -191,16 +191,16 @@ export async function openPosition(args: OpenPositionArgs): Promise<string | nul
     pnl_usd:               null,
   }]);
 
-  // Deduct from wallet
-  const wallets = await faSelect<{ id: string; paper_balance_usd: number }>(
-    'fa_agent_wallets', `agent_id=eq.${agentId}&select=id,paper_balance_usd`,
+  // Deduct from central bankroll
+  const bankrollRows = await faSelect<{ id: string; available_usd: number; allocated_usd: number }>(
+    'fa_central_bankroll', 'select=id,available_usd,allocated_usd&limit=1',
   );
-  if (wallets.length > 0) {
-    const newBalance = Number(wallets[0].paper_balance_usd) - sizeUsd;
-    await faPatch('fa_agent_wallets', { id: wallets[0].id }, {
-      paper_balance_usd:  newBalance,
-      total_notional_usd: String(Number(wallets[0] as any) + sizeUsd),
-      updated_at:         new Date().toISOString(),
+  if (bankrollRows.length > 0) {
+    const br = bankrollRows[0];
+    await faPatch('fa_central_bankroll', { id: br.id }, {
+      available_usd: Math.max(0, Number(br.available_usd) - sizeUsd),
+      allocated_usd: Number(br.allocated_usd) + sizeUsd,
+      updated_at:    new Date().toISOString(),
     });
   }
 
@@ -346,6 +346,19 @@ export async function tickPosition(
         notional_usd:          addUsd,
         pnl_usd:               null,
       }]);
+
+      // Deduct scale-in capital from central bankroll
+      const brScaleIn = await faSelect<{ id: string; available_usd: number; allocated_usd: number }>(
+        'fa_central_bankroll', 'select=id,available_usd,allocated_usd&limit=1',
+      );
+      if (brScaleIn.length > 0) {
+        const br = brScaleIn[0];
+        await faPatch('fa_central_bankroll', { id: br.id }, {
+          available_usd: Math.max(0, Number(br.available_usd) - addUsd),
+          allocated_usd: Number(br.allocated_usd) + addUsd,
+          updated_at:    new Date().toISOString(),
+        });
+      }
     }
 
   } else if (action === 'scale_out') {
@@ -400,16 +413,18 @@ export async function tickPosition(
       pnl_usd:               pos.realized_pnl + closingPnl,
     }]);
 
-    // Return funds to wallet
-    const wallets = await faSelect<{ id: string; paper_balance_usd: number }>(
-      'fa_agent_wallets', `agent_id=eq.${pos.agent_id}&select=id,paper_balance_usd`,
+    // Return capital + P&L to central bankroll
+    const brClose = await faSelect<{ id: string; available_usd: number; allocated_usd: number; total_realized_pnl: number }>(
+      'fa_central_bankroll', 'select=id,available_usd,allocated_usd,total_realized_pnl&limit=1',
     );
-    if (wallets.length > 0) {
-      const returnAmount = pos.cost_basis_usd + closingPnl; // cost + any gain
-      const newBalance = Math.max(0, Number(wallets[0].paper_balance_usd) + returnAmount);
-      await faPatch('fa_agent_wallets', { id: wallets[0].id }, {
-        paper_balance_usd: newBalance,
-        updated_at:        new Date().toISOString(),
+    if (brClose.length > 0) {
+      const br = brClose[0];
+      const returnAmount = pos.cost_basis_usd + closingPnl; // cost + any P&L
+      await faPatch('fa_central_bankroll', { id: br.id }, {
+        available_usd:      Math.max(0, Number(br.available_usd) + returnAmount),
+        allocated_usd:      Math.max(0, Number(br.allocated_usd) - pos.cost_basis_usd),
+        total_realized_pnl: Number(br.total_realized_pnl) + closingPnl,
+        updated_at:         new Date().toISOString(),
       });
     }
 

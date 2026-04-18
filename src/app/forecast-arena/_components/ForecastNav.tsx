@@ -1,58 +1,79 @@
 'use client';
 
 /**
- * ForecastNav — Shared navigation for Forecast Arena admin pages.
- * Client component for active-link highlighting.
+ * ForecastNav — Investment operator navigation.
+ * Restructured around the investment workflow (Hebrew labels).
  */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-const NAV_ITEMS = [
-  { href: '/forecast-arena/dashboard',   label: 'Dashboard' },
-  { href: '/forecast-arena/markets',     label: 'Markets' },
-  { href: '/forecast-arena/rounds',      label: 'Rounds' },
-  { href: '/forecast-arena/players',     label: 'Players' },
-  { href: '/forecast-arena/leaderboard', label: 'Leaderboard' },
-  { href: '/forecast-arena/costs',       label: 'Costs' },
-  { href: '/forecast-arena/ledger',      label: 'Ledger' },
-  { href: '/forecast-arena/audit',       label: 'Audit' },
+const PRIMARY_NAV = [
+  { href: '/forecast-arena/dashboard',  label: 'מרכז שליטה',  en: 'Control Center' },
+  { href: '/forecast-arena/decisions',  label: 'החלטות',       en: 'Decisions' },
+  { href: '/forecast-arena/positions',  label: 'פוזיציות',     en: 'Positions' },
+  { href: '/forecast-arena/finance',    label: 'כספים',        en: 'Finance' },
+  { href: '/forecast-arena/markets',    label: 'שווקים',       en: 'Markets' },
+];
+
+const SECONDARY_NAV = [
+  { href: '/forecast-arena/admin',      label: 'ניהול',        en: 'Admin' },
 ];
 
 export function ForecastNav() {
   const pathname = usePathname();
 
+  const isActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + '/');
+
+  const linkStyle = (href: string): React.CSSProperties => ({
+    padding:        '5px 13px',
+    fontSize:       '0.8rem',
+    color:          isActive(href) ? '#080808' : '#777',
+    background:     isActive(href) ? '#d4f25a' : 'transparent',
+    borderRadius:   '4px',
+    textDecoration: 'none',
+    fontWeight:     isActive(href) ? 700 : 400,
+    transition:     'all 0.12s',
+    display:        'flex',
+    flexDirection:  'column',
+    alignItems:     'center',
+    lineHeight:     1.2,
+    whiteSpace:     'nowrap',
+  });
+
   return (
     <nav style={{
-      display:       'flex',
-      flexWrap:      'wrap',
-      gap:           '4px',
-      padding:       '12px 0',
-      borderBottom:  '1px solid #222',
-      marginBottom:  '24px',
+      display:      'flex',
+      alignItems:   'center',
+      gap:          '2px',
+      padding:      '10px 0',
+      borderBottom: '1px solid #1e1e1e',
+      marginBottom: '28px',
     }}>
-      {NAV_ITEMS.map(item => {
-        const isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            style={{
-              padding:        '6px 14px',
-              fontSize:       '0.8rem',
-              fontFamily:     'monospace',
-              color:          isActive ? '#080808' : '#888',
-              background:     isActive ? '#d4f25a' : 'transparent',
-              borderRadius:   '4px',
-              textDecoration: 'none',
-              fontWeight:     isActive ? 700 : 400,
-              transition:     'all 0.15s',
-            }}
-          >
-            {item.label}
-          </Link>
-        );
-      })}
+      {PRIMARY_NAV.map(item => (
+        <Link key={item.href} href={item.href} style={linkStyle(item.href)}>
+          <span>{item.label}</span>
+          {!isActive(item.href) && (
+            <span style={{ fontSize: '0.55rem', color: '#444', marginTop: '1px' }}>{item.en}</span>
+          )}
+        </Link>
+      ))}
+
+      {/* Divider */}
+      <span style={{ color: '#222', margin: '0 6px' }}>|</span>
+
+      {SECONDARY_NAV.map(item => (
+        <Link key={item.href} href={item.href} style={{
+          ...linkStyle(item.href),
+          color: isActive(item.href) ? '#080808' : '#444',
+        }}>
+          <span>{item.label}</span>
+          {!isActive(item.href) && (
+            <span style={{ fontSize: '0.55rem', color: '#333', marginTop: '1px' }}>{item.en}</span>
+          )}
+        </Link>
+      ))}
     </nav>
   );
 }

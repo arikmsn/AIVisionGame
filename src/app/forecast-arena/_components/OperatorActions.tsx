@@ -72,29 +72,29 @@ export default function OperatorActions() {
   const BUTTONS: ButtonSpec[] = [
     {
       id:     'tick',
-      label:  'Run Tick Now',
-      note:   'Rule-based · no LLM · processes all open positions',
+      label:  'הרץ טיק',
+      note:   'ניהול פוזיציות · ללא LLM · כללים בלבד',
       color:  '#d4f25a',
       action: runTickAction,
     },
     {
       id:     'sync',
-      label:  'Sync Markets',
-      note:   'Pulls latest prices from Polymarket (top 50 by volume)',
+      label:  'סנכרן שווקים',
+      note:   'עדכון מחירים מ-Polymarket (50 מובילים)',
       color:  '#60a5fa',
       action: () => syncMarketsAction(50),
     },
     {
       id:     'create',
-      label:  'Create Round',
-      note:   'Opens 1 new round on the highest-volume active market',
+      label:  'צור סבב',
+      note:   'פתח סבב ניתוח על שוק בעל הנפח הגבוה ביותר',
       color:  '#fbbf24',
       action: () => createRoundAction(1),
     },
     {
       id:     'run',
-      label:  'Run Round',
-      note:   'Calls LLMs · runs all 6 agents on the oldest open round',
+      label:  'הרץ סבב',
+      note:   'שולח שאילתות LLM · 6 סוכנים · מנתח + פותח פוזיציות',
       color:  '#f97316',
       action: runLatestRoundAction,
     },
@@ -121,24 +121,11 @@ export default function OperatorActions() {
   return (
     <section style={{ marginBottom: '32px' }}>
       <h2 style={{
-        fontSize: '0.78rem', fontWeight: 600, color: '#555',
-        letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '12px',
+        fontSize: '0.72rem', fontWeight: 600, color: '#444',
+        letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '10px',
       }}>
-        Operator Actions
+        פעולות מפעיל
       </h2>
-
-      {/* Architecture note */}
-      <div style={{
-        padding: '8px 14px', marginBottom: '14px',
-        background: '#0a0a0a', border: '1px solid #1e1e1e', borderRadius: '4px',
-        fontSize: '0.68rem', color: '#555', lineHeight: 1.7,
-      }}>
-        <span style={{ color: '#3a5a1a', fontWeight: 600 }}>TICK (rule-based)</span>
-        {' '}stop-loss → scale-out → scale-in → hold — thresholds only, no LLM.{'  '}
-        <span style={{ color: '#5a3a1a', fontWeight: 600 }}>RUN ROUND (LLM)</span>
-        {' '}one call per agent per round for initial forecast + position entry.
-        Cron runs daily at 03:00 UTC (Vercel Hobby limit).
-      </div>
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
         {BUTTONS.map(btn => (

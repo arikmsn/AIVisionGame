@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runAllAgentsOnRound } from '@/lib/forecast/runner';
 import { faPatch, faSelect } from '@/lib/forecast/db';
 import { openPosition } from '@/lib/forecast/positions';
+import { shouldOpenPosition } from '@/lib/forecast/positions';
 
 export const maxDuration = 120;
 
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
       side?: string;
     }> = [];
 
+    // Load central bankroll balance once — shared across all agents
+    const bankrollRows = await faSelect<{ available_usd: number }>(
+      'fa_central_bankroll', 'select=available_usd&limit=1',
+    ).catch(() => []);
+    const centralBalance = bankrollRows[0] ? Number(bankrollRows[0].available_usd) : 60000;
+
     if (marketId && marketPrice > 0) {
       for (const sub of succeeded) {
         if (!sub.submissionId || sub.probabilityYes == null) continue;
@@ -64,29 +71,39 @@ export async function POST(request: NextRequest) {
         if (!agents[0]) continue;
         const agentId = agents[0].id;
 
-        // Load wallet balance
-        const wallets = await faSelect<{ paper_balance_usd: number }>(
-          'fa_agent_wallets', `agent_id=eq.${agentId}&select=paper_balance_usd`,
-        );
-        const walletBalance = wallets[0] ? Number(wallets[0].paper_balance_usd) : 10000;
+        const walletBalance = centralBalance; // shared pool
 
-        const positionId = await openPosition({
+        // Determine why a position was or wasn't opened (for UI transparency)
+        const openArgs = {
           agentId,
-          agentSlug:      sub.agentSlug,
+          agentSlug:    sub.agentSlug,
           marketId,
           roundId,
-          submissionId:   sub.submissionId,
-          agentProbYes:   sub.probabilityYes,
+          submissionId: sub.submissionId,
+          agentProbYes: sub.probabilityYes,
           marketPrice,
           walletBalance,
-        }).catch((err) => {
-          console.error(`[RUN-ROUND] openPosition error for ${sub.agentSlug}:`, err?.message);
-          return null;
-        });
+        };
+        const decision = shouldOpenPosition(openArgs);
+        let noPositionReason: string | undefined;
+        if (!decision) {
+          const edge = Math.abs(sub.probabilityYes - marketPrice);
+          noPositionReason = `edge ${(edge*100).toFixed(1)}% < 10% threshold`;
+        }
+
+        const positionId = decision
+          ? await openPosition(openArgs).catch((err) => {
+              console.error(`[RUN-ROUND] openPosition error for ${sub.agentSlug}:`, err?.message);
+              return null;
+            })
+          : null;
 
         positionResults.push({
-          agent:      sub.agentSlug,
+          agent:           sub.agentSlug,
           positionId,
+          side:            decision?.side,
+          edge:            decision ? Math.abs(sub.probabilityYes - marketPrice) : undefined,
+          noPositionReason,
         });
       }
     }
