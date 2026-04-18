@@ -18,6 +18,8 @@ import {
   syncMarketsAction,
   createRoundAction,
   runLatestRoundAction,
+  scoreMarketsAction,
+  refreshContextAction,
   type ActionResult,
 } from '../dashboard/actions';
 
@@ -97,6 +99,20 @@ export default function OperatorActions() {
       note:   'שולח שאילתות LLM · 6 סוכנים · מנתח + פותח פוזיציות',
       color:  '#f97316',
       action: runLatestRoundAction,
+    },
+    {
+      id:     'score',
+      label:  'דרג שווקים',
+      note:   'ניקוד 4 מימדים · בוחר TOP-5 שווקים לסבב הבא',
+      color:  '#a78bfa',
+      action: () => scoreMarketsAction(),
+    },
+    {
+      id:     'context',
+      label:  'רענן הקשר',
+      note:   'עדכון חדשות מ-NewsAPI עבור שווקים נבחרים',
+      color:  '#34d399',
+      action: refreshContextAction,
     },
   ];
 

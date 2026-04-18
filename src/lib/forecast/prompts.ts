@@ -5,6 +5,8 @@
  * dynamically built from market context.
  */
 
+import type { NewsContext } from './news-context';
+
 export interface MarketContext {
   title:           string;
   description:     string;
@@ -13,6 +15,7 @@ export interface MarketContext {
   closeTime:       string | null;
   category:        string | null;
   recentSnapshots?: Array<{ timestamp: string; yes_price: number }>;
+  newsContext?:    NewsContext;
 }
 
 const RESPONSE_FORMAT = `
@@ -85,6 +88,22 @@ export function buildUserMessage(ctx: MarketContext): string {
     for (const snap of ctx.recentSnapshots.slice(-5)) {
       parts.push(`- ${snap.timestamp}: ${(snap.yes_price * 100).toFixed(1)}%`);
     }
+  }
+
+  if (ctx.newsContext && ctx.newsContext.newsSummary) {
+    const nc = ctx.newsContext;
+    const age = Math.round((Date.now() - new Date(nc.lastUpdatedAt).getTime()) / 60_000);
+    parts.push(`\n## External News Context (${nc.fromCache ? 'cached' : 'fresh'}, ${age}m ago)`);
+    parts.push(`Summary: ${nc.newsSummary}`);
+    if (nc.keyPoints.length > 0) {
+      parts.push('Key points:');
+      nc.keyPoints.forEach(p => parts.push(`  • ${p}`));
+    }
+    parts.push(`Market sentiment: ${nc.sentiment} (relative to YES outcome)`);
+    if (nc.sources.length > 0) {
+      parts.push(`Sources: ${nc.sources.map(s => s.title).join(' | ')}`);
+    }
+    parts.push(`\nIMPORTANT: Use the above context as additional information. Do NOT make web calls.`);
   }
 
   parts.push(`\nMake your forecast now. Remember to return ONLY valid JSON.`);

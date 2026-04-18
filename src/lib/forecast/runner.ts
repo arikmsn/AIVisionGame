@@ -13,6 +13,8 @@ import { faInsert, faSelect } from './db';
 import { buildSystemPrompt, buildUserMessage, parseForecastOutput, type MarketContext } from './prompts';
 import { FORECAST_AGENTS } from './agents';
 import { getModelConfig, estimateCost, type ForecastProvider } from './registry';
+import { getOrRefreshContext } from './news-context';
+import { detectDomain } from './market-scorer';
 
 // ── Provider response ─────────────────────────────────────────────────────────
 
@@ -241,6 +243,9 @@ export async function runAgentOnRound(
   );
 
   // 3. Build prompts
+  const domain  = detectDomain(market.title, market.category);
+  const newsCtx = await getOrRefreshContext(round.market_id, market.title, domain).catch(() => undefined);
+
   const ctx: MarketContext = {
     title:           market.title,
     description:     market.description ?? '',
@@ -249,6 +254,7 @@ export async function runAgentOnRound(
     closeTime:       market.close_time,
     category:        market.category,
     recentSnapshots: snapshots.reverse(),
+    newsContext:     newsCtx,
   };
 
   const systemPrompt = buildSystemPrompt(strategy);

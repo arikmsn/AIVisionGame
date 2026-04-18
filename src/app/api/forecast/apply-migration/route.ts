@@ -291,6 +291,102 @@ const MIGRATION_014 = [
    ) pos ON true`,
 ];
 
+// ── Migration 015: Market Context, Scores, Experiment Config ─────────────────
+
+const MIGRATION_015 = [
+  `CREATE TABLE IF NOT EXISTS fa_market_context (
+    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    market_id        uuid NOT NULL REFERENCES fa_markets(id) ON DELETE CASCADE UNIQUE,
+    domain           text NOT NULL DEFAULT 'general',
+    news_summary     text,
+    key_points       jsonb DEFAULT '[]',
+    sentiment        text CHECK (sentiment IN ('positive','negative','neutral')) DEFAULT 'neutral',
+    sources          jsonb DEFAULT '[]',
+    raw_headlines_json jsonb DEFAULT '[]',
+    last_updated_at  timestamptz NOT NULL DEFAULT now(),
+    created_at       timestamptz NOT NULL DEFAULT now()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS fa_market_scores (
+    id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    market_id          uuid NOT NULL REFERENCES fa_markets(id) ON DELETE CASCADE UNIQUE,
+    domain             text NOT NULL DEFAULT 'general',
+    score              numeric(5,2) NOT NULL DEFAULT 0,
+    tags               text[] DEFAULT '{}',
+    volume_score       numeric(5,2) DEFAULT 0,
+    timing_score       numeric(5,2) DEFAULT 0,
+    price_score        numeric(5,2) DEFAULT 0,
+    news_score         numeric(5,2) DEFAULT 0,
+    news_count         integer DEFAULT 0,
+    is_selected        boolean NOT NULL DEFAULT false,
+    selection_rank     integer,
+    eligible           boolean NOT NULL DEFAULT false,
+    ineligible_reason  text,
+    scored_at          timestamptz NOT NULL DEFAULT now()
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS fa_experiment_config (
+    id                        uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                      text NOT NULL DEFAULT 'Sports Pilot — Season 1',
+    domain                    text NOT NULL DEFAULT 'sports',
+    status                    text NOT NULL DEFAULT 'active',
+    starts_at                 timestamptz NOT NULL DEFAULT now(),
+    ends_at                   timestamptz,
+    max_concurrent_positions  integer NOT NULL DEFAULT 10,
+    risk_per_position_pct     numeric(5,4) NOT NULL DEFAULT 0.02,
+    max_markets_per_run       integer NOT NULL DEFAULT 5,
+    min_score_threshold       numeric(5,2) NOT NULL DEFAULT 30,
+    notes                     text,
+    created_at                timestamptz NOT NULL DEFAULT now()
+  )`,
+
+  `ALTER TABLE fa_market_context ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE fa_market_scores ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE fa_experiment_config ENABLE ROW LEVEL SECURITY`,
+
+  `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'fa_market_context_service' AND tablename = 'fa_market_context') THEN
+      CREATE POLICY fa_market_context_service ON fa_market_context FOR ALL TO service_role USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'fa_market_scores_service' AND tablename = 'fa_market_scores') THEN
+      CREATE POLICY fa_market_scores_service ON fa_market_scores FOR ALL TO service_role USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'fa_experiment_config_service' AND tablename = 'fa_experiment_config') THEN
+      CREATE POLICY fa_experiment_config_service ON fa_experiment_config FOR ALL TO service_role USING (true) WITH CHECK (true);
+    END IF;
+  END $$`,
+
+  `INSERT INTO fa_experiment_config (name, domain, status, starts_at)
+   SELECT 'Sports Pilot — Season 1', 'sports', 'active', now()
+   WHERE NOT EXISTS (SELECT 1 FROM fa_experiment_config)`,
+
+  `CREATE OR REPLACE VIEW fa_v_market_strategy AS
+   SELECT
+     m.id AS market_id,
+     m.title,
+     m.category,
+     m.current_yes_price,
+     m.volume_usd,
+     m.close_time,
+     m.status AS market_status,
+     COALESCE(ms.domain, 'general') AS domain,
+     COALESCE(ms.score, 0) AS score,
+     ms.tags,
+     ms.is_selected,
+     ms.selection_rank,
+     ms.eligible,
+     ms.ineligible_reason,
+     ms.scored_at,
+     mc.news_summary,
+     mc.key_points,
+     mc.sentiment,
+     mc.last_updated_at AS context_updated_at,
+     (mc.last_updated_at IS NOT NULL AND EXTRACT(EPOCH FROM (now() - mc.last_updated_at))/3600 < 8) AS context_fresh
+   FROM fa_markets m
+   LEFT JOIN fa_market_scores ms ON ms.market_id = m.id
+   LEFT JOIN fa_market_context mc ON mc.market_id = m.id`,
+];
+
 async function executeSql(sql: string, url: string, key: string): Promise<{ ok: boolean; error?: string }> {
   // Use Supabase's pg endpoint via the Management API isn't available,
   // so we use the RPC approach: create a temporary function
@@ -326,8 +422,9 @@ export async function POST(request: NextRequest) {
   const migration = (body as any).migration ?? 'all';
 
   const statementsMap: Record<string, string[]> = {
-    all:  MIGRATION_STATEMENTS,
+    all:   MIGRATION_STATEMENTS,
     '014': MIGRATION_014,
+    '015': MIGRATION_015,
   };
   const statements = statementsMap[migration] ?? MIGRATION_STATEMENTS;
   const fullSql = statements.join(';\n\n') + ';';

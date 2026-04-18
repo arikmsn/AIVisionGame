@@ -11,9 +11,11 @@
 
 import { runTickCycle } from '@/lib/forecast/positions';
 import { syncMarketsToDb } from '@/lib/forecast/polymarket';
-import { faInsert, faSelect, faPatch } from '@/lib/forecast/db';
+import { faInsert, faSelect, faPatch, faUpsert } from '@/lib/forecast/db';
 import { runAllAgentsOnRound } from '@/lib/forecast/runner';
 import { openPosition } from '@/lib/forecast/positions';
+import { scoreMarket, selectTopMarkets, detectDomain, type MarketForScoring } from '@/lib/forecast/market-scorer';
+import { getNewsCountOnly, getOrRefreshContext } from '@/lib/forecast/news-context';
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -104,6 +106,94 @@ export async function createRoundAction(count = 1): Promise<ActionResult> {
     };
   } catch (err: any) {
     return { ok: false, message: err?.message ?? 'Create round failed' };
+  }
+}
+
+// ── Score Markets ─────────────────────────────────────────────────────────────
+
+export async function scoreMarketsAction(domain = 'sports', topN = 5): Promise<ActionResult> {
+  try {
+    const markets = await faSelect<MarketForScoring>(
+      'fa_markets',
+      'status=eq.active&select=id,title,category,current_yes_price,volume_usd,close_time&limit=200',
+    );
+
+    const scored = await Promise.all(
+      markets.map(async (m) => {
+        const mDomain = detectDomain(m.title, m.category);
+        const newsCount = mDomain === domain ? await getNewsCountOnly(m.title, domain).catch(() => 0) : 0;
+        return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain };
+      })
+    );
+
+    const selected = selectTopMarkets(scored.map(s => s.scored), topN);
+    const selectedIds = new Set(selected.map(s => s.marketId));
+
+    const rows = scored.map(({ scored: s, market: m, domain: d }) => ({
+      market_id:         m.id,
+      domain:            d,
+      score:             s.score,
+      tags:              s.tags,
+      volume_score:      s.breakdown.volumeScore,
+      timing_score:      s.breakdown.timingScore,
+      price_score:       s.breakdown.priceScore,
+      news_score:        s.breakdown.newsScore,
+      news_count:        0,
+      is_selected:       selectedIds.has(m.id),
+      selection_rank:    selectedIds.has(m.id) ? selected.findIndex(sel => sel.marketId === m.id) + 1 : null,
+      eligible:          s.eligible,
+      ineligible_reason: s.reason ?? null,
+      scored_at:         new Date().toISOString(),
+    }));
+
+    await faUpsert('fa_market_scores', rows, 'market_id');
+
+    return {
+      ok:      true,
+      message: `Scored ${markets.length} markets; ${selected.length} selected`,
+      detail:  {
+        total:    markets.length,
+        eligible: scored.filter(s => s.scored.eligible).length,
+        selected: selected.length,
+        top:      selected.slice(0, 3).map(s => {
+          const m = markets.find(mk => mk.id === s.marketId);
+          return { score: s.score, title: m?.title?.slice(0, 50) };
+        }),
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? 'Score markets failed' };
+  }
+}
+
+// ── Refresh Context ───────────────────────────────────────────────────────────
+
+export async function refreshContextAction(): Promise<ActionResult> {
+  try {
+    const scores = await faSelect<{ market_id: string }>('fa_market_scores', 'is_selected=eq.true&select=market_id');
+    let markets: Array<{ id: string; title: string; category: string | null }> = [];
+
+    if (scores.length === 0) {
+      markets = await faSelect('fa_markets', 'status=eq.active&select=id,title,category&order=volume_usd.desc&limit=5');
+    } else {
+      const ids = scores.map(s => s.market_id).join(',');
+      markets = await faSelect('fa_markets', `id=in.(${ids})&select=id,title,category`);
+    }
+
+    let refreshed = 0;
+    for (const m of markets) {
+      const domain = detectDomain(m.title, m.category);
+      await getOrRefreshContext(m.id, m.title, domain, true).catch(() => null);
+      refreshed++;
+    }
+
+    return {
+      ok:      true,
+      message: `Refreshed context for ${refreshed} markets`,
+      detail:  { markets: markets.map(m => m.title.slice(0, 50)) },
+    };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? 'Refresh context failed' };
   }
 }
 

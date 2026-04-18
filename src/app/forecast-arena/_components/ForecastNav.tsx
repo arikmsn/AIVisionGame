@@ -14,6 +14,7 @@ const PRIMARY_NAV = [
   { href: '/forecast-arena/positions',  label: 'פוזיציות',     en: 'Positions' },
   { href: '/forecast-arena/finance',    label: 'כספים',        en: 'Finance' },
   { href: '/forecast-arena/markets',    label: 'שווקים',       en: 'Markets' },
+  { href: '/forecast-arena/experiment', label: 'ניסוי',        en: 'Experiment' },
 ];
 
 const SECONDARY_NAV = [

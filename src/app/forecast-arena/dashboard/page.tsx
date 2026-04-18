@@ -65,23 +65,33 @@ const TD: React.CSSProperties = { padding: '8px 12px', fontSize: '0.78rem' };
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  let bankroll:     any   = null;
-  let openPos:      any[] = [];
-  let closedPos:    any[] = [];
-  let recentRounds: any[] = [];
-  let tickAudit:    any[] = [];
-  let syncJobs:     any[] = [];
-  let submissions:  any[] = [];
+  let bankroll:      any   = null;
+  let openPos:       any[] = [];
+  let closedPos:     any[] = [];
+  let recentRounds:  any[] = [];
+  let tickAudit:     any[] = [];
+  let syncJobs:      any[] = [];
+  let submissions:   any[] = [];
+  let experimentCfg: any   = null;
+  let marketScoreStats: { total: number; selected: number } = { total: 0, selected: 0 };
 
   try {
-    [bankroll, openPos, closedPos, recentRounds, tickAudit, syncJobs] = await Promise.all([
+    [bankroll, openPos, closedPos, recentRounds, tickAudit, syncJobs, experimentCfg] = await Promise.all([
       sfetch('fa_central_bankroll?select=*&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
       sfetch('fa_v_open_positions?select=position_id,agent_display_name,market_title,side,size_usd,cost_basis_usd,avg_entry_price,current_price,unrealized_pnl,realized_pnl,tick_count,last_action,opened_at&order=opened_at.desc').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_positions?status=eq.closed&select=id,agent_id,market_id,side,cost_basis_usd,realized_pnl,closed_at&order=closed_at.desc&limit=8').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_v_round_summary?select=round_id,round_number,market_title,market_yes_price_at_open,round_status,submission_count,opened_at&order=opened_at.desc&limit=5').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_audit_events?event_type=eq.tick_cycle&select=created_at,payload_json&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_sync_jobs?select=status,started_at,records_processed&order=started_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+      sfetch('fa_experiment_config?status=eq.active&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
     ]);
+
+    // Market score stats
+    const scoreRows = await sfetch('fa_market_scores?select=is_selected').then((r: any) => Array.isArray(r) ? r : []).catch(() => []);
+    marketScoreStats = {
+      total:    scoreRows.length,
+      selected: scoreRows.filter((s: any) => s.is_selected).length,
+    };
 
     // Get recent submissions for closed positions to enrich with agent names
     if (closedPos.length > 0) {
@@ -139,8 +149,54 @@ export default async function DashboardPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const expDaysAgo = experimentCfg?.starts_at
+    ? Math.floor((Date.now() - new Date(experimentCfg.starts_at).getTime()) / 86_400_000)
+    : null;
+
   return (
     <div>
+
+      {/* ── Experiment KPI Strip ── */}
+      {experimentCfg && (
+        <section style={{ marginBottom: '20px' }}>
+          <div style={{
+            display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center',
+            padding: '10px 16px', background: '#090909',
+            border: '1px solid #1e2a1e', borderRadius: '6px',
+            fontSize: '0.72rem',
+          }}>
+            <span style={{ color: '#d4f25a', fontWeight: 700, fontSize: '0.8rem' }}>
+              ◈ {experimentCfg.name}
+            </span>
+            <span style={{ color: '#555' }}>|</span>
+            <span style={{ color: '#888' }}>
+              <span style={{ color: '#555' }}>domain: </span>
+              <strong style={{ color: '#fbbf24' }}>{experimentCfg.domain}</strong>
+            </span>
+            {expDaysAgo !== null && (
+              <span style={{ color: '#888' }}>
+                <span style={{ color: '#555' }}>started: </span>
+                <strong>{expDaysAgo}d ago</strong>
+              </span>
+            )}
+            <span style={{ color: '#888' }}>
+              <span style={{ color: '#555' }}>monitored: </span>
+              <strong>{marketScoreStats.total}</strong>
+            </span>
+            <span style={{ color: '#888' }}>
+              <span style={{ color: '#555' }}>selected: </span>
+              <strong style={{ color: '#4ade80' }}>{marketScoreStats.selected}</strong>
+            </span>
+            <span style={{ color: '#888' }}>
+              <span style={{ color: '#555' }}>open positions: </span>
+              <strong>{openPos.length}</strong>
+            </span>
+            <Link href="/forecast-arena/experiment" style={{ marginLeft: 'auto', color: '#444', textDecoration: 'none', fontSize: '0.68rem' }}>
+              ניסוי מלא →
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* ── Financial Summary Bar ── */}
       <section style={{ marginBottom: '32px' }}>
