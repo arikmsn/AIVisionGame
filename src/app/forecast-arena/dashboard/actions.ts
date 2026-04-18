@@ -197,6 +197,90 @@ export async function refreshContextAction(): Promise<ActionResult> {
   }
 }
 
+// ── Daily Cycle (full autonomous run) ────────────────────────────────────────
+
+export async function runDailyCycleAction(): Promise<ActionResult> {
+  try {
+    // Step 1: sync
+    const sync = await syncMarketsToDb(50).catch((e: any) => ({ inserted: 0, updated: 0, errors: [e?.message] }));
+
+    // Step 2: score
+    const markets = await faSelect<MarketForScoring>(
+      'fa_markets',
+      'status=eq.active&select=id,title,category,current_yes_price,volume_usd,close_time&limit=200',
+    );
+    const domain = 'sports'; const topN = 5;
+    const scored = await Promise.all(markets.map(async (m) => {
+      const mDomain = detectDomain(m.title, m.category);
+      const newsCount = mDomain === domain ? await getNewsCountOnly(m.title, domain).catch(() => 0) : 0;
+      return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain };
+    }));
+    const selected    = selectTopMarkets(scored.map(s => s.scored), topN);
+    const selectedIds = new Set(selected.map(s => s.marketId));
+    const scoreRows   = scored.map(({ scored: s, market: m, domain: d }) => ({
+      market_id: m.id, domain: d, score: s.score, tags: s.tags,
+      volume_score: s.breakdown.volumeScore, timing_score: s.breakdown.timingScore,
+      price_score: s.breakdown.priceScore, news_score: s.breakdown.newsScore,
+      news_count: 0, is_selected: selectedIds.has(m.id),
+      selection_rank: selectedIds.has(m.id) ? selected.findIndex(sel => sel.marketId === m.id) + 1 : null,
+      eligible: s.eligible, ineligible_reason: s.reason ?? null, scored_at: new Date().toISOString(),
+    }));
+    await faUpsert('fa_market_scores', scoreRows, 'market_id');
+
+    // Step 3: context
+    const selMarketIds = selected.map(s => s.marketId);
+    if (selMarketIds.length > 0) {
+      const mktRows = await faSelect<{ id: string; title: string; category: string | null }>(
+        'fa_markets', `id=in.(${selMarketIds.join(',')})&select=id,title,category`,
+      );
+      for (const m of mktRows) {
+        const md = detectDomain(m.title, m.category);
+        await getOrRefreshContext(m.id, m.title, md).catch(() => null);
+      }
+    }
+
+    // Step 4: create + run rounds
+    const seasons = await faSelect<{ id: string }>('fa_seasons', 'status=eq.active&order=created_at.desc&limit=1&select=id');
+    const seasonId = seasons[0]?.id ?? null;
+    let positionsOpened = 0;
+    for (const mId of selMarketIds) {
+      try {
+        const existing = await faSelect<{ round_number: number }>('fa_rounds', `market_id=eq.${mId}&order=round_number.desc&limit=1&select=round_number`);
+        const nextRound = (existing[0]?.round_number ?? 0) + 1;
+        const mkt = await faSelect<{ current_yes_price: number }>('fa_markets', `id=eq.${mId}&select=current_yes_price`);
+        const yesPrice = mkt[0]?.current_yes_price ?? null;
+        const ins = await faInsert('fa_rounds', [{ season_id: seasonId, market_id: mId, round_number: nextRound, status: 'open', market_yes_price_at_open: yesPrice, context_json: { created_by: 'daily-cycle' } }], { returning: true });
+        const roundRow = Array.isArray(ins) ? ins[0] : null;
+        if (!roundRow) continue;
+        const roundId = (roundRow as any).id as string;
+        await faPatch('fa_rounds', { id: roundId }, { status: 'running' });
+        const results = await runAllAgentsOnRound(roundId);
+        await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
+        const bankroll = await faSelect<{ available_usd: number }>('fa_central_bankroll', 'select=available_usd&limit=1').catch(() => []);
+        const balance = bankroll[0] ? Number(bankroll[0].available_usd) : 60000;
+        for (const sub of results.filter(r => r.success)) {
+          if (!sub.submissionId || sub.probabilityYes == null) continue;
+          const agentRow = await faSelect<{ id: string }>('fa_agents', `slug=eq.${sub.agentSlug}&select=id`);
+          if (!agentRow[0]) continue;
+          const posId = await openPosition({ agentId: agentRow[0].id, agentSlug: sub.agentSlug, marketId: mId, roundId, submissionId: sub.submissionId, agentProbYes: sub.probabilityYes, marketPrice: Number(yesPrice ?? 0), walletBalance: balance }).catch(() => null);
+          if (posId) positionsOpened++;
+        }
+      } catch { /* continue to next market */ }
+    }
+
+    // Step 5: tick
+    const tick = await runTickCycle().catch(() => ({ processed: 0, results: [], errors: [] }));
+
+    return {
+      ok:      true,
+      message: `Daily cycle complete: ${sync.inserted + sync.updated} markets synced, ${selected.length} selected, ${positionsOpened} positions opened, ${tick.processed} positions ticked`,
+      detail:  { sync: { inserted: sync.inserted, updated: sync.updated }, score: { total: markets.length, selected: selected.length }, positions_opened: positionsOpened, tick_processed: tick.processed },
+    };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? 'Daily cycle failed' };
+  }
+}
+
 // ── Run round ─────────────────────────────────────────────────────────────────
 
 export async function runLatestRoundAction(): Promise<ActionResult> {

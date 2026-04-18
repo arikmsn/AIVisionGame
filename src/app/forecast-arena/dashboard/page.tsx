@@ -1,8 +1,8 @@
 /**
- * /forecast-arena/dashboard — מרכז שליטה להשקעות
+ * /forecast-arena/dashboard — Investment Control Center
  *
- * Investment Control Center.
- * Primary operator entry point: bankroll state, open positions, recent decisions.
+ * Primary operator entry point: bankroll state, open positions,
+ * system status, recent decisions.
  */
 
 import Link from 'next/link';
@@ -20,6 +20,24 @@ function pnlColor(n: number) { return n > 0 ? '#4ade80' : n < 0 ? '#f87171' : '#
 function pnlStr(n: number) {
   const s = $(n);
   return n >= 0 ? `+${s}` : `-${s}`;
+}
+function relTime(iso: string | undefined): string {
+  if (!iso) return 'never';
+  const ms  = Date.now() - new Date(iso).getTime();
+  const m   = Math.floor(ms / 60_000);
+  const h   = Math.floor(ms / 3_600_000);
+  const d   = Math.floor(ms / 86_400_000);
+  if (m < 2)   return 'just now';
+  if (m < 90)  return `${m}m ago`;
+  if (h < 36)  return `${h}h ago`;
+  return `${d}d ago`;
+}
+function statusColor(iso: string | undefined, warnHours: number, staleHours: number): string {
+  if (!iso) return '#f87171';
+  const h = (Date.now() - new Date(iso).getTime()) / 3_600_000;
+  if (h < warnHours)  return '#4ade80';
+  if (h < staleHours) return '#fbbf24';
+  return '#f87171';
 }
 
 function KpiCard({
@@ -65,15 +83,21 @@ const TD: React.CSSProperties = { padding: '8px 12px', fontSize: '0.78rem' };
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
-  let bankroll:      any   = null;
-  let openPos:       any[] = [];
-  let closedPos:     any[] = [];
-  let recentRounds:  any[] = [];
-  let tickAudit:     any[] = [];
-  let syncJobs:      any[] = [];
-  let submissions:   any[] = [];
-  let experimentCfg: any   = null;
+  let bankroll:        any   = null;
+  let openPos:         any[] = [];
+  let closedPos:       any[] = [];
+  let recentRounds:    any[] = [];
+  let tickAudit:       any[] = [];
+  let syncJobs:        any[] = [];
+  let submissions:     any[] = [];
+  let experimentCfg:   any   = null;
   let marketScoreStats: { total: number; selected: number } = { total: 0, selected: 0 };
+
+  // System status timestamps
+  let lastScoreAt:      string | undefined;
+  let lastContextAt:    string | undefined;
+  let lastRoundAt:      string | undefined;
+  let lastDailyCycleAt: string | undefined;
 
   try {
     [bankroll, openPos, closedPos, recentRounds, tickAudit, syncJobs, experimentCfg] = await Promise.all([
@@ -86,6 +110,20 @@ export default async function DashboardPage() {
       sfetch('fa_experiment_config?status=eq.active&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
     ]);
 
+    // System status: last scoring, context, round, daily cycle
+    const [scoreRow, contextRow, dailyCycleRow] = await Promise.all([
+      sfetch('fa_market_scores?select=scored_at&order=scored_at.desc&limit=1')
+        .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+      sfetch('fa_market_context?select=last_updated_at&order=last_updated_at.desc&limit=1')
+        .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+      sfetch('fa_audit_events?event_type=eq.daily_cycle&select=created_at&order=created_at.desc&limit=1')
+        .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+    ]);
+    lastScoreAt      = scoreRow?.scored_at;
+    lastContextAt    = contextRow?.last_updated_at;
+    lastDailyCycleAt = dailyCycleRow?.created_at;
+    lastRoundAt      = recentRounds[0]?.opened_at;
+
     // Market score stats
     const scoreRows = await sfetch('fa_market_scores?select=is_selected').then((r: any) => Array.isArray(r) ? r : []).catch(() => []);
     marketScoreStats = {
@@ -93,7 +131,7 @@ export default async function DashboardPage() {
       selected: scoreRows.filter((s: any) => s.is_selected).length,
     };
 
-    // Get recent submissions for closed positions to enrich with agent names
+    // Enrich closed positions with agent + market names
     if (closedPos.length > 0) {
       const agentIds = [...new Set(closedPos.map((p: any) => p.agent_id))].join(',');
       const agents = await sfetch(`fa_agents?id=in.(${agentIds})&select=id,display_name`).then((r: any) => Array.isArray(r) ? r : []).catch(() => []);
@@ -108,7 +146,6 @@ export default async function DashboardPage() {
       }));
     }
 
-    // Get submissions for recent rounds (for decision summary)
     if (recentRounds.length > 0) {
       const roundIds = recentRounds.map((r: any) => r.round_id).join(',');
       submissions = await sfetch(
@@ -119,22 +156,17 @@ export default async function DashboardPage() {
 
   // ── Derived financial state ────────────────────────────────────────────────
 
-  const totalDeposit    = Number(bankroll?.total_deposit_usd   ?? 60000);
-  const availableUsd    = Number(bankroll?.available_usd        ?? 60000);
-  const allocatedUsd    = Number(bankroll?.allocated_usd        ?? 0);
-  const realizedPnl     = Number(bankroll?.total_realized_pnl   ?? 0);
-  const unrealizedPnl   = openPos.reduce((s: number, p: any) => s + Number(p.unrealized_pnl || 0), 0);
-  const netPnl          = realizedPnl + unrealizedPnl;
-  const netValue        = totalDeposit + netPnl;
-  const allocatedPct    = totalDeposit > 0 ? (allocatedUsd / totalDeposit * 100).toFixed(1) : '0.0';
+  const totalDeposit  = Number(bankroll?.total_deposit_usd   ?? 60000);
+  const availableUsd  = Number(bankroll?.available_usd        ?? 60000);
+  const allocatedUsd  = Number(bankroll?.allocated_usd        ?? 0);
+  const realizedPnl   = Number(bankroll?.total_realized_pnl   ?? 0);
+  const unrealizedPnl = openPos.reduce((s: number, p: any) => s + Number(p.unrealized_pnl || 0), 0);
+  const netPnl        = realizedPnl + unrealizedPnl;
+  const netValue      = totalDeposit + netPnl;
+  const allocatedPct  = totalDeposit > 0 ? (allocatedUsd / totalDeposit * 100).toFixed(1) : '0.0';
 
-  const lastTickTime = tickAudit[0]?.created_at
-    ? new Date(tickAudit[0].created_at).toLocaleString('he-IL')
-    : 'לא בוצע';
-
-  const lastSyncTime = syncJobs[0]?.started_at
-    ? new Date(syncJobs[0].started_at).toLocaleString('he-IL')
-    : 'לא בוצע';
+  const lastTickTime = tickAudit[0]?.created_at;
+  const lastSyncTime = syncJobs[0]?.started_at;
 
   const subsByRound = new Map<string, any[]>();
   for (const s of submissions) {
@@ -144,14 +176,61 @@ export default async function DashboardPage() {
 
   const actionColors: Record<string, string> = {
     strong_yes: '#4ade80', lean_yes: '#86efac', hold: '#9ca3af',
-    lean_no: '#fca5a5',  strong_no: '#f87171',
+    lean_no: '#fca5a5', strong_no: '#f87171',
   };
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   const expDaysAgo = experimentCfg?.starts_at
     ? Math.floor((Date.now() - new Date(experimentCfg.starts_at).getTime()) / 86_400_000)
     : null;
+
+  // ── System status items ────────────────────────────────────────────────────
+
+  const systemItems = [
+    {
+      label:  'Market Sync',
+      time:   lastSyncTime,
+      ok:     !!lastSyncTime,
+      warn:   12, stale: 48,     // hours
+      detail: `${syncJobs[0]?.records_processed ?? 0} records`,
+    },
+    {
+      label:  'Market Scoring',
+      time:   lastScoreAt,
+      ok:     !!lastScoreAt,
+      warn:   12, stale: 48,
+      detail: `${marketScoreStats.total} scored, ${marketScoreStats.selected} selected`,
+    },
+    {
+      label:  'News Context',
+      time:   lastContextAt,
+      ok:     !!lastContextAt,
+      warn:   10, stale: 24,
+      detail: '',
+    },
+    {
+      label:  'Last Round',
+      time:   lastRoundAt,
+      ok:     !!lastRoundAt,
+      warn:   12, stale: 48,
+      detail: '',
+    },
+    {
+      label:  'Last Tick',
+      time:   lastTickTime,
+      ok:     !!lastTickTime,
+      warn:   12, stale: 48,
+      detail: `${tickAudit[0]?.payload_json?.processed ?? 0} positions`,
+    },
+    {
+      label:  'Daily Cycle',
+      time:   lastDailyCycleAt,
+      ok:     !!lastDailyCycleAt,
+      warn:   24, stale: 48,
+      detail: '06:00 + 18:00 UTC',
+    },
+  ];
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div>
@@ -192,7 +271,7 @@ export default async function DashboardPage() {
               <strong>{openPos.length}</strong>
             </span>
             <Link href="/forecast-arena/experiment" style={{ marginLeft: 'auto', color: '#444', textDecoration: 'none', fontSize: '0.68rem' }}>
-              ניסוי מלא →
+              Full Experiment →
             </Link>
           </div>
         </section>
@@ -201,18 +280,18 @@ export default async function DashboardPage() {
       {/* ── Financial Summary Bar ── */}
       <section style={{ marginBottom: '32px' }}>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <KpiCard label="שווי תיק" value={$(netValue)}
+          <KpiCard label="Portfolio Value" value={$(netValue)}
             color={netPnl >= 0 ? '#d4f25a' : '#f87171'} size="large"
-            sub={`פיקדון מקורי: ${$(totalDeposit)}`} />
-          <KpiCard label="מזומן פנוי" value={$(availableUsd)}
-            color="#e8e8e8" sub={`${(100 - Number(allocatedPct)).toFixed(1)}% מהתיק`} />
-          <KpiCard label="הון מושקע" value={$(allocatedUsd)}
-            color="#fbbf24" sub={`${allocatedPct}% · ${openPos.length} פוזיציות פתוחות`} />
-          <KpiCard label="רווח/הפסד לא ממומש" value={pnlStr(unrealizedPnl)}
+            sub={`Original deposit: ${$(totalDeposit)}`} />
+          <KpiCard label="Available Cash" value={$(availableUsd)}
+            color="#e8e8e8" sub={`${(100 - Number(allocatedPct)).toFixed(1)}% of portfolio`} />
+          <KpiCard label="Invested Capital" value={$(allocatedUsd)}
+            color="#fbbf24" sub={`${allocatedPct}% · ${openPos.length} open positions`} />
+          <KpiCard label="Unrealized P&L" value={pnlStr(unrealizedPnl)}
             color={pnlColor(unrealizedPnl)} />
-          <KpiCard label="רווח/הפסד ממומש" value={pnlStr(realizedPnl)}
+          <KpiCard label="Realized P&L" value={pnlStr(realizedPnl)}
             color={pnlColor(realizedPnl)} />
-          <KpiCard label="P&amp;L נטו" value={pnlStr(netPnl)}
+          <KpiCard label="Net P&L" value={pnlStr(netPnl)}
             color={pnlColor(netPnl)} />
         </div>
       </section>
@@ -224,23 +303,23 @@ export default async function DashboardPage() {
       <section style={{ marginBottom: '36px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
           <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            פוזיציות פתוחות ({openPos.length})
+            Open Positions ({openPos.length})
           </h2>
           <Link href="/forecast-arena/positions" style={{ fontSize: '0.7rem', color: '#555', textDecoration: 'none' }}>
-            הצג הכל →
+            View all →
           </Link>
         </div>
 
         {openPos.length === 0 ? (
           <div style={{ padding: '20px', background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#444', fontSize: '0.8rem', textAlign: 'center' }}>
-            אין פוזיציות פתוחות — הפעל &ldquo;הרץ סבב&rdquo; כדי לאפשר לסוכנים לנתח שווקים ולפתוח פוזיציות.
+            No open positions — the daily cycle will open them automatically, or click &ldquo;Run Round&rdquo; to trigger now.
           </div>
         ) : (
           <div style={{ overflowX: 'auto', border: '1px solid #1a1a1a', borderRadius: '6px' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead style={{ background: '#0a0a0a' }}>
                 <tr>
-                  {['מודל', 'שוק', 'כיוון', 'גודל', 'כניסה', 'נוכחי', 'לא ממומש', 'ממומש', 'טיקים', 'פעולה אחרונה'].map(h => (
+                  {['Model', 'Market', 'Side', 'Cost', 'Entry', 'Current', 'Unrealized', 'Realized', 'Ticks', 'Last Action'].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
                 </tr>
@@ -282,7 +361,7 @@ export default async function DashboardPage() {
                         {rlz !== 0 ? pnlStr(rlz) : <span style={{ color: '#333' }}>—</span>}
                       </td>
                       <td style={{ ...TD, color: '#666' }}>{p.tick_count ?? 0}</td>
-                      <td style={{ ...TD, color: '#555' }}>{p.last_action ?? 'פתיחה'}</td>
+                      <td style={{ ...TD, color: '#555' }}>{p.last_action ?? 'open'}</td>
                     </tr>
                   );
                 })}
@@ -297,17 +376,17 @@ export default async function DashboardPage() {
         <section style={{ marginBottom: '36px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
             <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#555', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              פוזיציות שנסגרו לאחרונה
+              Recently Closed
             </h2>
             <Link href="/forecast-arena/positions" style={{ fontSize: '0.7rem', color: '#444', textDecoration: 'none' }}>
-              הצג הכל →
+              View all →
             </Link>
           </div>
           <div style={{ overflowX: 'auto', border: '1px solid #161616', borderRadius: '6px' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead style={{ background: '#090909' }}>
                 <tr>
-                  {['מודל', 'שוק', 'כיוון', 'עלות', 'P&L ממומש', 'סגירה'].map(h => (
+                  {['Model', 'Market', 'Side', 'Cost', 'Realized P&L', 'Closed'].map(h => (
                     <th key={h} style={{ ...TH, color: '#333' }}>{h}</th>
                   ))}
                 </tr>
@@ -337,7 +416,7 @@ export default async function DashboardPage() {
                         <span style={{ color: pnlColor(rlz) }}>{pnlStr(rlz)}</span>
                       </td>
                       <td style={{ ...TD, color: '#444', fontSize: '0.7rem' }}>
-                        {p.closed_at ? new Date(p.closed_at).toLocaleDateString('he-IL') : '--'}
+                        {p.closed_at ? new Date(p.closed_at).toLocaleDateString('en-US') : '--'}
                       </td>
                     </tr>
                   );
@@ -352,22 +431,21 @@ export default async function DashboardPage() {
       <section style={{ marginBottom: '36px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px' }}>
           <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#555', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            סבבי ניתוח אחרונים
+            Recent Analysis Rounds
           </h2>
           <Link href="/forecast-arena/decisions" style={{ fontSize: '0.7rem', color: '#444', textDecoration: 'none' }}>
-            כל ההחלטות →
+            All Decisions →
           </Link>
         </div>
 
         {recentRounds.length === 0 ? (
           <div style={{ padding: '20px', background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', color: '#444', fontSize: '0.8rem', textAlign: 'center' }}>
-            אין סבבים עדיין.
+            No rounds yet — the daily cycle will create and run them automatically.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {recentRounds.map((round: any) => {
               const subs = subsByRound.get(round.round_id) ?? [];
-              const positionsCount = subs.filter((s: any) => !s.error_text).length; // approx
               return (
                 <Link
                   key={round.round_id}
@@ -380,7 +458,7 @@ export default async function DashboardPage() {
                     display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap',
                   }}>
                     <div style={{ minWidth: '60px' }}>
-                      <div style={{ fontSize: '0.62rem', color: '#444' }}>סבב</div>
+                      <div style={{ fontSize: '0.62rem', color: '#444' }}>Round</div>
                       <div style={{ fontFamily: 'monospace', color: '#888', fontWeight: 600 }}>#{round.round_number}</div>
                     </div>
                     <div style={{ flex: 1, minWidth: '200px' }}>
@@ -388,17 +466,16 @@ export default async function DashboardPage() {
                         {round.market_title?.slice(0, 70)}
                       </div>
                       <div style={{ fontSize: '0.63rem', color: '#555', marginTop: '2px' }}>
-                        מחיר YES בפתיחה:{' '}
+                        YES at open:{' '}
                         <strong style={{ color: '#888' }}>
                           {round.market_yes_price_at_open != null
                             ? `${(Number(round.market_yes_price_at_open)*100).toFixed(1)}%`
                             : '--'}
                         </strong>
-                        {' · '}{subs.length} סוכנים
-                        {' · '}{new Date(round.opened_at).toLocaleDateString('he-IL')}
+                        {' · '}{subs.length} agent{subs.length !== 1 ? 's' : ''}
+                        {' · '}{new Date(round.opened_at).toLocaleDateString('en-US')}
                       </div>
                     </div>
-                    {/* Action pill summary */}
                     <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                       {subs.slice(0, 6).map((s: any, i: number) => (
                         <span key={i} style={{
@@ -421,20 +498,57 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* ── System Status Strip ── */}
+      {/* ── System Status ── */}
       <section>
-        <div style={{
-          display: 'flex', gap: '24px', flexWrap: 'wrap',
-          padding: '12px 16px', background: '#090909',
-          border: '1px solid #161616', borderRadius: '6px',
-          fontSize: '0.68rem', color: '#444',
-        }}>
-          <span>טיק אחרון: <strong style={{ color: '#555' }}>{lastTickTime}</strong></span>
-          <span>סנכרון אחרון: <strong style={{ color: '#555' }}>{lastSyncTime}</strong></span>
-          <span style={{ color: '#2a2a2a' }}>cron: 03:00 UTC יומי</span>
-          <Link href="/forecast-arena/admin" style={{ color: '#333', textDecoration: 'none', marginLeft: 'auto' }}>
-            יומני מערכת ←
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '10px' }}>
+          <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#555', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            System Status
+          </h2>
+          <Link href="/forecast-arena/admin" style={{ fontSize: '0.7rem', color: '#333', textDecoration: 'none' }}>
+            System Logs →
           </Link>
+        </div>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: '8px',
+        }}>
+          {systemItems.map((item) => {
+            const dotColor = item.time
+              ? statusColor(item.time, item.warn, item.stale)
+              : '#f87171';
+            const isHealthy = dotColor === '#4ade80';
+            const isWarn    = dotColor === '#fbbf24';
+            return (
+              <div key={item.label} style={{
+                background:   '#0a0a0a',
+                border:       `1px solid ${isHealthy ? '#1a2a1a' : isWarn ? '#2a2000' : '#2a1a1a'}`,
+                borderRadius: '6px',
+                padding:      '10px 14px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '0.6rem', color: '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {item.label}
+                  </span>
+                  <span style={{
+                    width: '7px', height: '7px', borderRadius: '50%',
+                    background: dotColor,
+                    boxShadow: `0 0 5px ${dotColor}66`,
+                    flexShrink: 0,
+                  }} />
+                </div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 600, color: item.time ? '#888' : '#444' }}>
+                  {relTime(item.time)}
+                </div>
+                {item.detail && (
+                  <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{item.detail}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#2a2a2a', padding: '0 2px' }}>
+          Cron schedule: daily-cycle at 06:00 UTC (full cycle) · tick at 18:00 UTC (position management)
         </div>
       </section>
 

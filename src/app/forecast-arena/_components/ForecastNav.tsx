@@ -9,16 +9,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const PRIMARY_NAV = [
-  { href: '/forecast-arena/dashboard',  label: 'מרכז שליטה',  en: 'Control Center' },
-  { href: '/forecast-arena/decisions',  label: 'החלטות',       en: 'Decisions' },
-  { href: '/forecast-arena/positions',  label: 'פוזיציות',     en: 'Positions' },
-  { href: '/forecast-arena/finance',    label: 'כספים',        en: 'Finance' },
-  { href: '/forecast-arena/markets',    label: 'שווקים',       en: 'Markets' },
-  { href: '/forecast-arena/experiment', label: 'ניסוי',        en: 'Experiment' },
+  { href: '/forecast-arena/dashboard',  label: 'Dashboard',  en: 'Control Center' },
+  { href: '/forecast-arena/decisions',  label: 'Decisions',  en: 'Decisions' },
+  { href: '/forecast-arena/positions',  label: 'Positions',  en: 'Positions' },
+  { href: '/forecast-arena/finance',    label: 'Finance',    en: 'Finance' },
+  { href: '/forecast-arena/markets',    label: 'Markets',    en: 'Markets' },
+  { href: '/forecast-arena/experiment', label: 'Experiment', en: 'Experiment' },
 ];
 
 const SECONDARY_NAV = [
-  { href: '/forecast-arena/admin',      label: 'ניהול',        en: 'Admin' },
+  { href: '/forecast-arena/admin',      label: 'Admin',      en: 'Admin' },
 ];
 
 export function ForecastNav() {
@@ -55,9 +55,6 @@ export function ForecastNav() {
       {PRIMARY_NAV.map(item => (
         <Link key={item.href} href={item.href} style={linkStyle(item.href)}>
           <span>{item.label}</span>
-          {!isActive(item.href) && (
-            <span style={{ fontSize: '0.55rem', color: '#444', marginTop: '1px' }}>{item.en}</span>
-          )}
         </Link>
       ))}
 
@@ -70,9 +67,6 @@ export function ForecastNav() {
           color: isActive(item.href) ? '#080808' : '#444',
         }}>
           <span>{item.label}</span>
-          {!isActive(item.href) && (
-            <span style={{ fontSize: '0.55rem', color: '#333', marginTop: '1px' }}>{item.en}</span>
-          )}
         </Link>
       ))}
     </nav>

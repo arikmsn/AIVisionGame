@@ -24,23 +24,22 @@ function edgeExplanation(
 ): { text: string; color: string } {
   const edge = agentProb - marketPrice;
   const absEdge = Math.abs(edge);
-  const dir = edge > 0 ? 'גבוה מ' : 'נמוך מ';
   const sideLabel = side === 'long' ? 'LONG (YES)' : 'SHORT (NO)';
 
   if (positionOpened && side) {
     return {
-      text: `הסוכן העריך ${(agentProb*100).toFixed(1)}% לעומת שוק ${(marketPrice*100).toFixed(1)}%, יתרון ${(absEdge*100).toFixed(1)}% — נפתחה פוזיציית ${sideLabel} בגובה $${sizeUsd?.toFixed(2) ?? '--'}`,
+      text: `Agent estimated ${(agentProb*100).toFixed(1)}% vs market ${(marketPrice*100).toFixed(1)}%, edge ${(absEdge*100).toFixed(1)}% — opened ${sideLabel} $${sizeUsd?.toFixed(2) ?? '--'}`,
       color: side === 'long' ? '#4ade80' : '#f87171',
     };
   }
   if (noReason) {
     return {
-      text: `הסוכן העריך ${(agentProb*100).toFixed(1)}% לעומת שוק ${(marketPrice*100).toFixed(1)}%, יתרון ${(absEdge*100).toFixed(1)}% — לא נפתחה פוזיציה (${noReason})`,
+      text: `Agent estimated ${(agentProb*100).toFixed(1)}% vs market ${(marketPrice*100).toFixed(1)}%, edge ${(absEdge*100).toFixed(1)}% — no position (${noReason})`,
       color: '#555',
     };
   }
   return {
-    text: `הסוכן העריך ${(agentProb*100).toFixed(1)}% לעומת שוק ${(marketPrice*100).toFixed(1)}% — לא נפתחה פוזיציה`,
+    text: `Agent estimated ${(agentProb*100).toFixed(1)}% vs market ${(marketPrice*100).toFixed(1)}% — no position opened`,
     color: '#444',
   };
 }
@@ -48,11 +47,11 @@ function edgeExplanation(
 function pnlColor(n: number) { return n > 0 ? '#4ade80' : n < 0 ? '#f87171' : '#9ca3af'; }
 
 const ACTION_LABELS: Record<string, { he: string; color: string }> = {
-  strong_yes: { he: 'כן חזק',    color: '#4ade80' },
-  lean_yes:   { he: 'נטייה כן', color: '#86efac' },
-  hold:       { he: 'המתן',      color: '#9ca3af' },
-  lean_no:    { he: 'נטייה לא', color: '#fca5a5' },
-  strong_no:  { he: 'לא חזק',   color: '#f87171' },
+  strong_yes: { he: 'Strong Yes', color: '#4ade80' },
+  lean_yes:   { he: 'Lean Yes',   color: '#86efac' },
+  hold:       { he: 'Hold',       color: '#9ca3af' },
+  lean_no:    { he: 'Lean No',    color: '#fca5a5' },
+  strong_no:  { he: 'Strong No',  color: '#f87171' },
 };
 
 const TH: React.CSSProperties = {
@@ -120,21 +119,21 @@ export default async function DecisionsPage({
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e8e8e8', margin: 0 }}>
-            החלטות מודלים
+            Model Decisions
           </h1>
           <p style={{ color: '#555', fontSize: '0.73rem', marginTop: '4px' }}>
-            כל שוק שנותח — מה כל מודל העריך, למה, ומה נפתח
+            Every analyzed market — what each model assessed, why, and what was opened
           </p>
         </div>
         <div style={{ fontSize: '0.7rem', color: '#444' }}>
-          {totalCount} סבבים סה&quot;כ
+          {totalCount} rounds total
         </div>
       </div>
 
       {rounds.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', color: '#444', fontSize: '0.85rem',
           background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '8px' }}>
-          אין סבבי ניתוח עדיין. לחץ &ldquo;צור סבב&rdquo; ואז &ldquo;הרץ סבב&rdquo; בלוח השליטה.
+          No analysis rounds yet. Click &ldquo;Create Round&rdquo; then &ldquo;Run Round&rdquo; on the Dashboard.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -156,7 +155,7 @@ export default async function DecisionsPage({
                   display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap',
                 }}>
                   <div style={{ minWidth: '50px' }}>
-                    <div style={{ fontSize: '0.58rem', color: '#444' }}>סבב</div>
+                    <div style={{ fontSize: '0.58rem', color: '#444' }}>Round</div>
                     <div style={{ fontFamily: 'monospace', color: '#777', fontWeight: 700, fontSize: '0.9rem' }}>
                       #{round.round_number}
                     </div>
@@ -169,13 +168,13 @@ export default async function DecisionsPage({
                     </Link>
                     <div style={{ fontSize: '0.63rem', color: '#555', marginTop: '3px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                       <span>
-                        מחיר YES בפתיחה: <strong style={{ color: '#888' }}>
+                        YES price at open: <strong style={{ color: '#888' }}>
                           {marketPrice > 0 ? `${(marketPrice*100).toFixed(1)}%` : '--'}
                         </strong>
                       </span>
                       {round.market_category && <span style={{ color: '#444' }}>{round.market_category}</span>}
-                      <span>{new Date(round.opened_at).toLocaleDateString('he-IL')}{' '}
-                        {new Date(round.opened_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                      <span>{new Date(round.opened_at).toLocaleDateString('en-US')}{' '}
+                        {new Date(round.opened_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   </div>
@@ -186,7 +185,7 @@ export default async function DecisionsPage({
                       color: positionsOpened > 0 ? '#4ade80' : '#444',
                       border: `1px solid ${positionsOpened > 0 ? '#2a4a2a' : '#1a1a1a'}`,
                     }}>
-                      {positionsOpened > 0 ? `נפתחו ${positionsOpened} פוזיציות` : 'לא נפתחו פוזיציות'}
+                      {positionsOpened > 0 ? `${positionsOpened} position${positionsOpened !== 1 ? 's' : ''} opened` : 'No positions opened'}
                     </span>
                     <span style={{
                       fontSize: '0.62rem', padding: '2px 8px', borderRadius: '3px',
@@ -206,7 +205,7 @@ export default async function DecisionsPage({
                     <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                       <thead>
                         <tr>
-                          {['מודל', 'הסתברות', 'יתרון', 'ביטחון', 'המלצה', 'פוזיציה', 'הסבר', 'נימוק'].map(h => (
+                          {['Model', 'Probability', 'Edge', 'Confidence', 'Recommendation', 'Position', 'Explanation', 'Rationale'].map(h => (
                             <th key={h} style={TH}>{h}</th>
                           ))}
                         </tr>
@@ -226,9 +225,9 @@ export default async function DecisionsPage({
                             pos?.side ?? null,
                             pos ? Number(pos.cost_basis_usd) : null,
                             !hasPos && !hasError
-                              ? (absEdge < MIN_EDGE ? `יתרון ${(absEdge*100).toFixed(1)}% < סף 10%` : null)
+                              ? (absEdge < MIN_EDGE ? `edge ${(absEdge*100).toFixed(1)}% < 10% threshold` : null)
                               : null,
-                          ) : { text: `שגיאה: ${sub.error_text?.slice(0, 80)}`, color: '#f87171' };
+                          ) : { text: `Error: ${sub.error_text?.slice(0, 80)}`, color: '#f87171' };
 
                           return (
                             <tr key={sub.id} style={{
@@ -338,7 +337,7 @@ export default async function DecisionsPage({
                   </div>
                 ) : (
                   <div style={{ padding: '16px 18px', color: '#444', fontSize: '0.75rem' }}>
-                    אין הגשות עדיין לסבב זה.
+                    No submissions for this round yet.
                   </div>
                 )}
               </div>
@@ -355,18 +354,18 @@ export default async function DecisionsPage({
               padding: '6px 14px', background: '#111', border: '1px solid #222',
               borderRadius: '4px', color: '#888', textDecoration: 'none', fontSize: '0.78rem',
             }}>
-              ← הקודם
+              ← Previous
             </Link>
           )}
           <span style={{ padding: '6px 14px', color: '#555', fontSize: '0.78rem' }}>
-            עמוד {page} מתוך {totalPages}
+            Page {page} of {totalPages}
           </span>
           {page < totalPages && (
             <Link href={`?page=${page+1}`} style={{
               padding: '6px 14px', background: '#111', border: '1px solid #222',
               borderRadius: '4px', color: '#888', textDecoration: 'none', fontSize: '0.78rem',
             }}>
-              הבא →
+              Next →
             </Link>
           )}
         </div>

@@ -138,49 +138,49 @@ export default async function FinancePage() {
   return (
     <div>
       <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e8e8e8', margin: 0 }}>כספים</h1>
+        <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e8e8e8', margin: 0 }}>Finance</h1>
         <p style={{ color: '#555', fontSize: '0.73rem', marginTop: '4px' }}>
-          מאגר הון מרכזי — הון מסחר בנפרד מעלויות LLM
+          Central bankroll — trading capital separate from LLM costs
         </p>
       </div>
 
       {/* ── Central Bankroll ── */}
       <section style={{ marginBottom: '36px' }}>
         <h2 style={{ fontSize: '0.72rem', fontWeight: 600, color: '#555', margin: '0 0 14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          מאגר הון מרכזי
+          Central Bankroll
         </h2>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <BigCard
-            label="שווי תיק נטו"
+            label="Net Portfolio Value"
             value={usd(netValue)}
             color={netPnl >= 0 ? '#d4f25a' : '#f87171'}
-            pct={`${netPnl >= 0 ? '+' : ''}${((netPnl/totalDeposit)*100).toFixed(2)}% מפיקדון`}
+            pct={`${netPnl >= 0 ? '+' : ''}${((netPnl/totalDeposit)*100).toFixed(2)}% vs deposit`}
             pctColor={pnlColor(netPnl)}
           />
           <BigCard
-            label="מזומן פנוי"
+            label="Available Cash"
             value={usd(availableUsd)}
-            sub={`${((availableUsd/totalDeposit)*100).toFixed(1)}% מהפיקדון`}
+            sub={`${((availableUsd/totalDeposit)*100).toFixed(1)}% of deposit`}
           />
           <BigCard
-            label="הון מושקע"
+            label="Invested Capital"
             value={usd(allocatedUsd)}
             color="#fbbf24"
-            sub={`${openPositions.length} פוזיציות פתוחות`}
+            sub={`${openPositions.length} open positions`}
           />
           <BigCard
-            label="P&L לא ממומש"
+            label="Unrealized P&L"
             value={pnlStr(unrealizedPnl)}
             color={pnlColor(unrealizedPnl)}
           />
           <BigCard
-            label="P&L ממומש"
+            label="Realized P&L"
             value={pnlStr(realizedPnl)}
             color={pnlColor(realizedPnl)}
-            sub="הצטבר מסגירות"
+            sub="accumulated from closes"
           />
           <BigCard
-            label="פיקדון מקורי"
+            label="Original Deposit"
             value={usd(totalDeposit)}
             color="#666"
           />
@@ -191,13 +191,13 @@ export default async function FinancePage() {
       {marketRows.length > 0 && (
         <section style={{ marginBottom: '36px' }}>
           <h2 style={{ fontSize: '0.72rem', fontWeight: 600, color: '#555', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            הון לפי שוק (פוזיציות פתוחות)
+            Capital by Market (open positions)
           </h2>
           <div style={{ border: '1px solid #1a1a1a', borderRadius: '6px', overflow: 'hidden' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  {['שוק', 'פוזיציות', 'הון מושקע', '% מהתיק', 'P&L לא ממומש'].map(h => (
+                  {['Market', 'Positions', 'Invested', '% of Portfolio', 'Unrealized P&L'].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
                 </tr>
@@ -228,13 +228,13 @@ export default async function FinancePage() {
       {modelRows.length > 0 && (
         <section style={{ marginBottom: '36px' }}>
           <h2 style={{ fontSize: '0.72rem', fontWeight: 600, color: '#555', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            ביצועים לפי מודל (אנליטיקה בלבד — אין ארנקות נפרדים)
+            Performance by Model (analytics only — shared bankroll)
           </h2>
           <div style={{ border: '1px solid #1a1a1a', borderRadius: '6px', overflow: 'hidden' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  {['מודל', 'פוזיציות פתוחות', 'פוזיציות סגורות', 'הון פרוס', 'P&L ממומש', 'P&L לא ממומש', 'P&L כולל'].map(h => (
+                  {['Model', 'Open Positions', 'Closed Positions', 'Deployed', 'Realized P&L', 'Unrealized P&L', 'Total P&L'].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
                 </tr>
@@ -269,7 +269,7 @@ export default async function FinancePage() {
             </table>
           </div>
           <p style={{ fontSize: '0.62rem', color: '#333', marginTop: '8px', paddingRight: '4px' }}>
-            * הנתונים לעיל הם ניתוחיים בלבד. ההון אינו מחולק לארנקות נפרדים לפי מודל — כולם מושכים מאותו מאגר הון מרכזי.
+            * These figures are analytical only. Capital is not split by model — all agents draw from the same central bankroll.
           </p>
         </section>
       )}
@@ -277,7 +277,7 @@ export default async function FinancePage() {
       {/* ── API / LLM Costs — Separated from trading capital ── */}
       <section style={{ marginBottom: '36px' }}>
         <h2 style={{ fontSize: '0.72rem', fontWeight: 600, color: '#555', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          עלויות API / LLM — נפרד מהון המסחר
+          API / LLM Costs — Separate from trading capital
         </h2>
 
         <div style={{
@@ -286,21 +286,21 @@ export default async function FinancePage() {
           marginBottom: '14px', display: 'flex', gap: '28px', flexWrap: 'wrap',
         }}>
           <div>
-            <div style={{ fontSize: '0.6rem', color: '#555', textTransform: 'uppercase', marginBottom: '4px' }}>סה&quot;כ עלות API</div>
+            <div style={{ fontSize: '0.6rem', color: '#555', textTransform: 'uppercase', marginBottom: '4px' }}>Total API Cost</div>
             <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#f59e0b', fontFamily: 'monospace' }}>
               ${totalLlmCost.toFixed(4)}
             </div>
             <div style={{ fontSize: '0.62rem', color: '#444', marginTop: '3px' }}>
-              {llmCosts.length} קריאות · הון מסחר נפרד לחלוטין
+              {llmCosts.length} calls · trading capital entirely separate
             </div>
           </div>
           <div style={{ borderLeft: '1px solid #1a1a1a', paddingLeft: '28px' }}>
-            <div style={{ fontSize: '0.6rem', color: '#444', marginBottom: '6px', textTransform: 'uppercase' }}>לפי מודל</div>
+            <div style={{ fontSize: '0.6rem', color: '#444', marginBottom: '6px', textTransform: 'uppercase' }}>By model</div>
             {[...llmByAgent.entries()].map(([agentId, data]) => (
               <div key={agentId} style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', marginBottom: '4px', color: '#555' }}>
                 <span style={{ minWidth: '180px', color: '#777' }}>{agentNames.get(agentId) ?? agentId.slice(0, 8)}</span>
                 <span style={{ fontFamily: 'monospace', color: '#f59e0b' }}>${data.cost.toFixed(4)}</span>
-                <span style={{ color: '#444' }}>{data.calls} קריאות</span>
+                <span style={{ color: '#444' }}>{data.calls} calls</span>
                 <span style={{ color: '#333' }}>{(data.tokens / 1000).toFixed(1)}K tokens</span>
               </div>
             ))}
@@ -312,10 +312,8 @@ export default async function FinancePage() {
           border: '1px solid #141414', borderRadius: '6px',
           fontSize: '0.68rem', color: '#333', lineHeight: 1.8,
         }}>
-          <strong style={{ color: '#444' }}>הבחנה חשובה:</strong>{' '}
-          עלויות ה-API הן הוצאה תפעולית על קריאות LLM לצורך ניתוח שווקים.
-          הן אינן נלקחות מהון המסחר ואינן מופחתות מ-P&L הפוזיציות.
-          הון המסחר (${usd(totalDeposit)}) הוא הון נייר ייעודי לסימולציית מסחר.
+          <strong style={{ color: '#444' }}>Important:</strong>{' '}
+          API costs are operational expenses for LLM market analysis. They are NOT deducted from trading capital or position P&L. Trading capital ({usd(totalDeposit)}) is a dedicated paper trading simulation fund.
         </div>
       </section>
 
@@ -323,13 +321,13 @@ export default async function FinancePage() {
       {closingTx.length > 0 && (
         <section>
           <h2 style={{ fontSize: '0.72rem', fontWeight: 600, color: '#444', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            אירועי P&L ממומש אחרונים
+            Recent Realized P&L Events
           </h2>
           <div style={{ border: '1px solid #141414', borderRadius: '6px', overflow: 'hidden' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  {['סוג', 'גודל', 'P&L', 'תאריך'].map(h => (
+                  {['Type', 'Size', 'P&L', 'Date'].map(h => (
                     <th key={h} style={{ ...TH, color: '#333' }}>{h}</th>
                   ))}
                 </tr>
@@ -355,7 +353,7 @@ export default async function FinancePage() {
                         <span style={{ color: pnlColor(pnl) }}>{pnlStr(pnl)}</span>
                       </td>
                       <td style={{ ...TD, color: '#444', fontSize: '0.68rem' }}>
-                        {new Date(t.created_at).toLocaleDateString('he-IL')}
+                        {new Date(t.created_at).toLocaleDateString('en-US')}
                       </td>
                     </tr>
                   );

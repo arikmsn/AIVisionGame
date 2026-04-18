@@ -20,6 +20,7 @@ import {
   runLatestRoundAction,
   scoreMarketsAction,
   refreshContextAction,
+  runDailyCycleAction,
   type ActionResult,
 } from '../dashboard/actions';
 
@@ -74,45 +75,52 @@ export default function OperatorActions() {
   const BUTTONS: ButtonSpec[] = [
     {
       id:     'tick',
-      label:  'הרץ טיק',
-      note:   'ניהול פוזיציות · ללא LLM · כללים בלבד',
+      label:  'Run Tick',
+      note:   'Position management · no LLM · rules only',
       color:  '#d4f25a',
       action: runTickAction,
     },
     {
       id:     'sync',
-      label:  'סנכרן שווקים',
-      note:   'עדכון מחירים מ-Polymarket (50 מובילים)',
+      label:  'Sync Markets',
+      note:   'Fetch top-50 active markets from Polymarket',
       color:  '#60a5fa',
       action: () => syncMarketsAction(50),
     },
     {
       id:     'create',
-      label:  'צור סבב',
-      note:   'פתח סבב ניתוח על שוק בעל הנפח הגבוה ביותר',
+      label:  'Create Round',
+      note:   'Open an analysis round on highest-volume market',
       color:  '#fbbf24',
       action: () => createRoundAction(1),
     },
     {
       id:     'run',
-      label:  'הרץ סבב',
-      note:   'שולח שאילתות LLM · 6 סוכנים · מנתח + פותח פוזיציות',
+      label:  'Run Round',
+      note:   'Sends LLM queries · 6 agents · analyse + open positions',
       color:  '#f97316',
       action: runLatestRoundAction,
     },
     {
       id:     'score',
-      label:  'דרג שווקים',
-      note:   'ניקוד 4 מימדים · בוחר TOP-5 שווקים לסבב הבא',
+      label:  'Score Markets',
+      note:   '4-dimension score · selects TOP-5 markets for next round',
       color:  '#a78bfa',
       action: () => scoreMarketsAction(),
     },
     {
       id:     'context',
-      label:  'רענן הקשר',
-      note:   'עדכון חדשות מ-NewsAPI עבור שווקים נבחרים',
+      label:  'Refresh Context',
+      note:   'Update news from NewsAPI for selected markets',
       color:  '#34d399',
       action: refreshContextAction,
+    },
+    {
+      id:     'daily',
+      label:  'Run Daily Cycle',
+      note:   'Full cycle: sync → score → context → round → tick',
+      color:  '#e879f9',
+      action: runDailyCycleAction,
     },
   ];
 
@@ -140,7 +148,7 @@ export default function OperatorActions() {
         fontSize: '0.72rem', fontWeight: 600, color: '#444',
         letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '10px',
       }}>
-        פעולות מפעיל
+        Operator Actions
       </h2>
 
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

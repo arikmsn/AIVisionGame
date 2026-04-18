@@ -8,7 +8,7 @@
 import { ForecastNav } from './_components/ForecastNav';
 
 export const metadata = {
-  title: 'מערכת תחזיות — לוח שליטה',
+  title: 'Forecast Arena — Dashboard',
 };
 
 export default function ForecastArenaLayout({
@@ -40,10 +40,10 @@ export default function ForecastArenaLayout({
           letterSpacing: '0.02em',
           fontFamily:    'monospace',
         }}>
-          מערכת תחזיות
+          Forecast Arena
         </h1>
         <span style={{ color: '#333', fontSize: '0.72rem' }}>
-          מנוע תחזיות שווקי חיזוי — Forecast Arena
+          Prediction market investment system
         </span>
       </header>
       <ForecastNav />

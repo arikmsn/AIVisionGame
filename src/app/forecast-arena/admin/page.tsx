@@ -113,24 +113,24 @@ export default async function AdminPage() {
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#888', margin: 0 }}>ניהול מערכת</h1>
+        <h1 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#888', margin: 0 }}>System Admin</h1>
         <p style={{ color: '#444', fontSize: '0.7rem', marginTop: '4px' }}>
-          נתוני מערכת, לוגים, עלויות API ותצורה — מסך משני
+          System metrics, logs, API costs and configuration — secondary screen
         </p>
       </div>
 
       {/* ── System Stats ── */}
-      <Section title="נתוני מערכת">
+      <Section title="System Stats">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {[
-            { label: 'שווקים פעילים',   value: activeMarkets,             sub: `${markets.length} סה"כ` },
-            { label: 'סבבים פתוחים',    value: openRounds,                sub: `${completedRounds} הושלמו` },
-            { label: 'סבבים היום',      value: roundsToday },
-            { label: 'הגשות',           value: submissions.length,         color: errorSubs > 0 ? '#f87171' : undefined, sub: errorSubs > 0 ? `${errorSubs} שגיאות` : undefined },
-            { label: 'נבדקו',           value: scores.length },
-            { label: 'Brier ממוצע',     value: avgBrier != null ? avgBrier.toFixed(4) : '--', sub: 'נמוך = טוב יותר' },
-            { label: 'עלות LLM סה"כ',  value: `$${totalCost.toFixed(4)}` },
-            { label: 'סוכנים פעילים',   value: agents.filter((a: any) => a.is_active).length },
+            { label: 'Active Markets',  value: activeMarkets,             sub: `${markets.length} total` },
+            { label: 'Open Rounds',     value: openRounds,                sub: `${completedRounds} completed` },
+            { label: 'Rounds Today',    value: roundsToday },
+            { label: 'Submissions',     value: submissions.length,         color: errorSubs > 0 ? '#f87171' : undefined, sub: errorSubs > 0 ? `${errorSubs} errors` : undefined },
+            { label: 'Scored',          value: scores.length },
+            { label: 'Avg Brier',       value: avgBrier != null ? avgBrier.toFixed(4) : '--', sub: 'lower = better' },
+            { label: 'Total LLM Cost',  value: `$${totalCost.toFixed(4)}` },
+            { label: 'Active Agents',   value: agents.filter((a: any) => a.is_active).length },
           ].map((card, i) => (
             <div key={i} style={{
               background: '#0e0e0e', border: '1px solid #1a1a1a',
@@ -145,39 +145,39 @@ export default async function AdminPage() {
       </Section>
 
       {/* ── News Context ── */}
-      <Section title="הקשר חדשותי (News Context)">
+      <Section title="News Context">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
           {/* Active provider badge */}
           <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 140px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>ספק פעיל</div>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Active Provider</div>
             <div style={{ fontSize: '0.9rem', fontWeight: 700, color: activeKeyPresent ? '#4ade80' : '#f87171', marginTop: '4px' }}>
               {PROVIDER_LABELS[activeProvider]}
             </div>
             <div style={{ fontSize: '0.58rem', color: activeKeyPresent ? '#2d6a4f' : '#7f1d1d', marginTop: '2px' }}>
-              {activeKeyPresent ? `${activeProviderKey} ✓` : `${activeProviderKey} חסר`}
+              {activeKeyPresent ? `${activeProviderKey} ✓ set` : `${activeProviderKey} missing`}
             </div>
           </div>
           {/* Markets with context */}
           <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>שווקים עם הקשר</div>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Markets w/ Context</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>{marketContexts.length}</div>
           </div>
           {/* Refreshed today */}
           <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>עדכונים היום</div>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Refreshed Today</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>{contextsToday}</div>
-            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>~קריאות API</div>
+            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>~API calls</div>
           </div>
           {/* Cache hours */}
           <div style={{ background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '6px', padding: '10px 14px', flex: '1 1 110px' }}>
-            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>מטמון</div>
+            <div style={{ fontSize: '0.58rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cache</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#888', marginTop: '4px' }}>8h</div>
-            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>תוקף כניסה</div>
+            <div style={{ fontSize: '0.58rem', color: '#3a3a3a', marginTop: '2px' }}>TTL per entry</div>
           </div>
         </div>
         {/* Provider key status grid */}
         <div style={{ background: '#090909', border: '1px solid #141414', borderRadius: '5px', padding: '10px 14px' }}>
-          <div style={{ fontSize: '0.58rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>מפתחות API</div>
+          <div style={{ fontSize: '0.58rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>API Keys</div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {(['thenewsapi', 'worldnews', 'marketaux', 'mediastack'] as NewsProvider[]).map(p => {
               const envKey = PROVIDER_KEY_ENV[p];
@@ -200,13 +200,13 @@ export default async function AdminPage() {
             })}
           </div>
           <div style={{ fontSize: '0.58rem', color: '#2e2e2e', marginTop: '8px', fontFamily: 'monospace' }}>
-            לשנות ספק: NEWS_API_PROVIDER = thenewsapi | worldnews | marketaux | mediastack
+            To switch: NEWS_API_PROVIDER = thenewsapi | worldnews | marketaux | mediastack
           </div>
         </div>
       </Section>
 
       {/* ── Active Agents ── */}
-      <Section title="סוכנים פעילים">
+      <Section title="Active Agents">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {agents.filter((a: any) => a.is_active).map((a: any) => (
             <div key={a.id} style={{
@@ -225,15 +225,15 @@ export default async function AdminPage() {
       </Section>
 
       {/* ── Sync Jobs ── */}
-      <Section title="משימות סנכרון">
+      <Section title="Sync Jobs">
         {syncJobs.length === 0 ? (
-          <p style={{ color: '#3a3a3a', fontSize: '0.75rem' }}>אין משימות סנכרון עדיין.</p>
+          <p style={{ color: '#3a3a3a', fontSize: '0.75rem' }}>No sync jobs yet.</p>
         ) : (
           <div style={{ border: '1px solid #141414', borderRadius: '6px', overflow: 'hidden' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  {['סטטוס', 'התחלה', 'סיום', 'רשומות', 'שגיאה'].map(h => (
+                  {['Status', 'Started', 'Completed', 'Records', 'Error'].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
                 </tr>
@@ -251,10 +251,10 @@ export default async function AdminPage() {
                       </span>
                     </td>
                     <td style={{ ...TD, color: '#555' }}>
-                      {job.started_at ? new Date(job.started_at).toLocaleString('he-IL') : '--'}
+                      {job.started_at ? new Date(job.started_at).toLocaleString('en-US') : '--'}
                     </td>
                     <td style={{ ...TD, color: '#444' }}>
-                      {job.completed_at ? new Date(job.completed_at).toLocaleString('he-IL') : '--'}
+                      {job.completed_at ? new Date(job.completed_at).toLocaleString('en-US') : '--'}
                     </td>
                     <td style={{ ...TD, color: '#666' }}>{job.records_processed ?? 0}</td>
                     <td style={{ ...TD, color: '#5a2a2a', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -269,15 +269,15 @@ export default async function AdminPage() {
       </Section>
 
       {/* ── Audit Trail ── */}
-      <Section title="יומן ביקורת">
+      <Section title="Audit Trail">
         {auditEvents.length === 0 ? (
-          <p style={{ color: '#333', fontSize: '0.75rem' }}>אין אירועים.</p>
+          <p style={{ color: '#333', fontSize: '0.75rem' }}>No events.</p>
         ) : (
           <div style={{ border: '1px solid #111', borderRadius: '6px', overflow: 'hidden' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>
-                  {['אירוע', 'שחקן', 'ישות', 'זמן', 'פרטים'].map(h => (
+                  {['Event', 'Actor', 'Entity', 'Time', 'Details'].map(h => (
                     <th key={h} style={TH}>{h}</th>
                   ))}
                 </tr>
@@ -295,7 +295,7 @@ export default async function AdminPage() {
                       {ev.entity_id ? ev.entity_id.slice(0, 12) + '…' : '--'}
                     </td>
                     <td style={{ ...TD, color: '#3a3a3a', fontSize: '0.65rem' }}>
-                      {new Date(ev.created_at).toLocaleString('he-IL')}
+                      {new Date(ev.created_at).toLocaleString('en-US')}
                     </td>
                     <td style={{ ...TD, color: '#2e2e2e', fontSize: '0.62rem', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace' }}>
                       {ev.payload_json ? JSON.stringify(ev.payload_json).slice(0, 80) : '--'}
@@ -309,20 +309,20 @@ export default async function AdminPage() {
       </Section>
 
       {/* ── API Reference ── */}
-      <Section title="ממשקי API">
+      <Section title="API Reference">
         <div style={{
           background: '#090909', border: '1px solid #141414',
           borderRadius: '6px', padding: '14px 18px',
           fontSize: '0.68rem', color: '#3a3a3a', lineHeight: 2.2, fontFamily: 'monospace',
         }}>
           {[
-            ['POST', '/api/forecast/sync-markets',  'סנכרן נתוני Polymarket'],
-            ['POST', '/api/forecast/seed-agents',   'אפס הגדרות סוכנים'],
-            ['POST', '/api/forecast/create-round',  'פתח סבב על שווקים'],
-            ['POST', '/api/forecast/run-round',     'הרץ סוכנים על סבב'],
-            ['POST', '/api/forecast/score-round',   'בדוק סבב שנסגר'],
+            ['POST', '/api/forecast/sync-markets',  'Sync Polymarket data'],
+            ['POST', '/api/forecast/seed-agents',   'Seed agent configuration'],
+            ['POST', '/api/forecast/create-round',  'Open a round on markets'],
+            ['POST', '/api/forecast/run-round',     'Run agents on a round'],
+            ['POST', '/api/forecast/score-round',   'Score a completed round'],
             ['GET',  '/api/forecast/tick',          'cron endpoint (CRON_SECRET)'],
-            ['POST', '/api/forecast/tick',          'טיק ידני (x-admin-password)'],
+            ['POST', '/api/forecast/tick',          'Manual tick (x-admin-password)'],
           ].map(([method, path, desc]) => (
             <div key={path} style={{ display: 'flex', gap: '12px' }}>
               <span style={{ color: method === 'POST' ? '#f59e0b' : '#60a5fa', minWidth: '40px' }}>{method}</span>
@@ -331,7 +331,7 @@ export default async function AdminPage() {
             </div>
           ))}
           <p style={{ marginTop: '10px', fontFamily: 'sans-serif', fontSize: '0.62rem', color: '#2e2e2e' }}>
-            כל POST דורש header: <code style={{ color: '#444' }}>x-admin-password</code>
+            All POST endpoints require header: <code style={{ color: '#444' }}>x-admin-password</code>
           </p>
         </div>
       </Section>

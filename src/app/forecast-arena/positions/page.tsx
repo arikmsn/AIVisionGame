@@ -28,35 +28,81 @@ const ACTION_COLORS: Record<string, string> = {
   close:       '#a78bfa',
   hold:        '#3a3a3a',
 };
-const ACTION_LABELS_HE: Record<string, string> = {
-  scale_in:    'הגדלה',
-  scale_out:   'קיצוץ',
-  stop_loss:   'סטופ לוס',
-  expiry_exit: 'יציאת פקיעה',
-  close:       'סגירה',
-  hold:        'המתנה',
+const ACTION_LABELS: Record<string, string> = {
+  scale_in:    'Scale In',
+  scale_out:   'Scale Out',
+  stop_loss:   'Stop Loss',
+  expiry_exit: 'Expiry Exit',
+  close:       'Close',
+  hold:        'Hold',
 };
 
+const STOP_LOSS_THRESHOLD   = 0.20;  // -20% of cost basis
+const SCALE_OUT_THRESHOLD   = 0.15;  // +15% of cost basis
+const EXPIRY_EXIT_HOURS     = 24;
+
+function computeExitConditions(pos: any, marketCloseTime: string | null): {
+  stopLossPrice: number;
+  scaleOutPrice: number;
+  expiryHours:   number | null;
+  currentRule:   string | null;
+} {
+  const entry = Number(pos.avg_entry_price || pos.open_price || 0);
+  const cb    = Number(pos.cost_basis_usd || 0);
+
+  let stopLossPrice: number;
+  let scaleOutPrice: number;
+
+  if (pos.side === 'long') {
+    // unrealizedPct = (current - entry) / entry
+    // stop_loss: (current - entry)/entry < -0.20  → current < entry*(1-0.20)
+    // scale_out: (current - entry)/entry > +0.15  → current > entry*(1+0.15)
+    stopLossPrice = entry * (1 - STOP_LOSS_THRESHOLD);
+    scaleOutPrice = entry * (1 + SCALE_OUT_THRESHOLD);
+  } else {
+    // unrealizedPct = (entry - current) / (1 - entry)
+    // stop_loss: (entry-current)/(1-entry) < -0.20 → current > entry + 0.20*(1-entry)
+    // scale_out: (entry-current)/(1-entry) > +0.15 → current < entry - 0.15*(1-entry)
+    stopLossPrice = entry + STOP_LOSS_THRESHOLD * (1 - entry);
+    scaleOutPrice = entry - SCALE_OUT_THRESHOLD * (1 - entry);
+  }
+
+  let expiryHours: number | null = null;
+  if (marketCloseTime) {
+    const hoursLeft = (new Date(marketCloseTime).getTime() - Date.now()) / 3_600_000;
+    if (hoursLeft < 72) expiryHours = Math.round(hoursLeft);  // only show if within 3 days
+  }
+
+  // What rule would fire NOW if a tick ran?
+  const unrPct = cb > 0 ? (Number(pos.unrealized_pnl || 0)) / cb : 0;
+  let currentRule: string | null = null;
+  if (expiryHours !== null && expiryHours < EXPIRY_EXIT_HOURS) currentRule = 'expiry_exit';
+  else if (unrPct < -STOP_LOSS_THRESHOLD) currentRule = 'stop_loss';
+  else if (unrPct > SCALE_OUT_THRESHOLD && (pos.scale_out_count ?? 0) === 0) currentRule = 'scale_out';
+
+  return { stopLossPrice, scaleOutPrice, expiryHours, currentRule };
+}
+
 function buildStory(pos: any, ticks: any[]): string {
-  const sideHe = pos.side === 'long' ? 'LONG YES' : 'SHORT NO';
-  const entry  = (Number(pos.avg_entry_price) * 100).toFixed(1);
-  const cost   = Number(pos.cost_basis_usd).toFixed(2);
-  const parts: string[] = [`נפתחה פוזיציית ${sideHe} ב-${entry}% עם $${cost}.`];
+  const side  = pos.side === 'long' ? 'LONG YES' : 'SHORT NO';
+  const entry = (Number(pos.avg_entry_price) * 100).toFixed(1);
+  const cost  = Number(pos.cost_basis_usd).toFixed(2);
+  const parts: string[] = [`Opened ${side} at ${entry}% with $${cost}.`];
 
   for (const t of ticks) {
     const mp = (Number(t.market_price) * 100).toFixed(1);
     if (t.action === 'scale_in') {
       const delta = t.size_delta_usd ? `+$${Number(t.size_delta_usd).toFixed(2)}` : '';
-      parts.push(`הגדלה ${delta} ב-${mp}% (טיק ${t.tick_number}).`);
+      parts.push(`Added ${delta} at ${mp}% (tick ${t.tick_number}).`);
     } else if (t.action === 'scale_out') {
-      const rlz = t.realized_pnl != null ? `, ממומש ${pnlStr(Number(t.realized_pnl))}` : '';
-      parts.push(`קוצצה 50% ב-${mp}%${rlz} (טיק ${t.tick_number}).`);
+      const rlz = t.realized_pnl != null ? `, realized ${pnlStr(Number(t.realized_pnl))}` : '';
+      parts.push(`Trimmed 50% at ${mp}%${rlz} (tick ${t.tick_number}).`);
     } else if (t.action === 'stop_loss') {
-      parts.push(`סטופ-לוס הופעל ב-${mp}% (טיק ${t.tick_number}).`);
+      parts.push(`Stop-loss triggered at ${mp}% (tick ${t.tick_number}).`);
     } else if (t.action === 'expiry_exit') {
-      parts.push(`יציאה לפני פקיעה ב-${mp}% (טיק ${t.tick_number}).`);
+      parts.push(`Expiry exit at ${mp}% (tick ${t.tick_number}).`);
     } else if (t.action === 'hold') {
-      parts.push(`המתנה ב-${mp}% (טיק ${t.tick_number}).`);
+      parts.push(`Held at ${mp}% (tick ${t.tick_number}).`);
     }
   }
 
@@ -65,9 +111,9 @@ function buildStory(pos: any, ticks: any[]): string {
   const retPct = pos.cost_basis_usd > 0 ? totalPnl / Number(pos.cost_basis_usd) : 0;
 
   if (pos.status === 'closed') {
-    parts.push(`P&L סופי: ${pnlStr(totalPnl)} (${pctStr(retPct)}).`);
+    parts.push(`Final P&L: ${pnlStr(totalPnl)} (${pctStr(retPct)}).`);
   } else {
-    parts.push(`פתוחה — לא ממומש ${pnlStr(totalPnl)} (${pctStr(retPct)}).`);
+    parts.push(`Open — unrealized ${pnlStr(totalPnl)} (${pctStr(retPct)}).`);
   }
   return parts.join(' ');
 }
@@ -182,7 +228,7 @@ export default async function PositionsPage() {
             color:      isOpen ? '#4ade80' : '#555',
             border: `1px solid ${isOpen ? '#2a4a2a' : '#222'}`,
           }}>
-            {isOpen ? 'פתוחה' : 'סגורה'}
+            {isOpen ? 'Open' : 'Closed'}
           </span>
           <span style={{ color: '#666', fontSize: '0.72rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {mktTitle}
@@ -202,33 +248,83 @@ export default async function PositionsPage() {
           fontSize: '0.72rem', color: '#555',
           borderBottom: '1px solid #131313',
         }}>
-          <span>כניסה <strong style={{ color: '#888', fontFamily: 'monospace' }}>
+          <span>Entry <strong style={{ color: '#888', fontFamily: 'monospace' }}>
             {(Number(p.avg_entry_price||p.open_price)*100).toFixed(1)}%
           </strong></span>
-          <span>עלות <strong style={{ color: '#888', fontFamily: 'monospace' }}>
+          <span>Cost <strong style={{ color: '#888', fontFamily: 'monospace' }}>
             ${Number(p.cost_basis_usd).toFixed(2)}
           </strong></span>
-          <span>חוזים <strong style={{ color: '#888', fontFamily: 'monospace' }}>
+          <span>Contracts <strong style={{ color: '#888', fontFamily: 'monospace' }}>
             {Number(p.contracts).toFixed(4)}
           </strong></span>
           {isOpen && p.current_price != null && (
-            <span>נוכחי <strong style={{ color: '#aaa', fontFamily: 'monospace' }}>
+            <span>Current <strong style={{ color: '#aaa', fontFamily: 'monospace' }}>
               {(Number(p.current_price)*100).toFixed(1)}%
             </strong></span>
           )}
           {rlz !== 0 && (
-            <span>ממומש <strong style={{ color: pnlColor(rlz) }}>{pnlStr(rlz)}</strong></span>
+            <span>Realized <strong style={{ color: pnlColor(rlz) }}>{pnlStr(rlz)}</strong></span>
           )}
           {isOpen && unr !== 0 && (
-            <span>לא ממומש <strong style={{ color: pnlColor(unr) }}>{pnlStr(unr)}</strong></span>
+            <span>Unrealized <strong style={{ color: pnlColor(unr) }}>{pnlStr(unr)}</strong></span>
           )}
-          <span>{ticks.length} טיקים</span>
+          <span>{ticks.length} tick{ticks.length !== 1 ? 's' : ''}</span>
           <span style={{ marginLeft: 'auto', color: '#444' }}>
             {isOpen
-              ? `${Math.floor(ageMs/3600000)}ש מזה`
-              : p.closed_at ? new Date(p.closed_at).toLocaleDateString('he-IL') : '--'}
+              ? `${Math.floor(ageMs/3600000)}h ago`
+              : p.closed_at ? new Date(p.closed_at).toLocaleDateString('en-US') : '--'}
           </span>
         </div>
+
+        {/* Exit conditions (open positions only) */}
+        {isOpen && (() => {
+          const ec = computeExitConditions(p, p.market_close_time ?? null);
+          const fmt = (n: number) => `${(n * 100).toFixed(1)}%`;
+          return (
+            <div style={{
+              padding: '8px 18px', display: 'flex', gap: '20px', flexWrap: 'wrap',
+              fontSize: '0.65rem', color: '#444', background: '#090909',
+              borderBottom: '1px solid #131313',
+            }}>
+              <span style={{ color: '#333' }}>Auto-close rules:</span>
+              <span>
+                <span style={{ color: '#f87171' }}>Stop-loss</span>
+                {' '}
+                <span style={{ color: '#555', fontFamily: 'monospace' }}>
+                  {p.side === 'long' ? `if price < ${fmt(ec.stopLossPrice)}` : `if price > ${fmt(ec.stopLossPrice)}`}
+                </span>
+              </span>
+              {(p.scale_out_count ?? 0) === 0 && (
+                <span>
+                  <span style={{ color: '#60a5fa' }}>Take-profit</span>
+                  {' '}
+                  <span style={{ color: '#555', fontFamily: 'monospace' }}>
+                    {p.side === 'long' ? `if price > ${fmt(ec.scaleOutPrice)}` : `if price < ${fmt(ec.scaleOutPrice)}`}
+                  </span>
+                </span>
+              )}
+              {ec.expiryHours !== null && (
+                <span>
+                  <span style={{ color: '#f59e0b' }}>Expiry exit</span>
+                  {' '}
+                  <span style={{ color: '#555', fontFamily: 'monospace' }}>
+                    {ec.expiryHours < 0 ? 'market expired' : `in ${ec.expiryHours}h`}
+                  </span>
+                </span>
+              )}
+              {ec.currentRule && (
+                <span style={{
+                  padding: '1px 6px', borderRadius: '3px', fontSize: '0.6rem', fontWeight: 700,
+                  background: ec.currentRule === 'stop_loss' ? '#3a0a0a' : ec.currentRule === 'expiry_exit' ? '#2a1a00' : '#0a1a2a',
+                  color: ec.currentRule === 'stop_loss' ? '#f87171' : ec.currentRule === 'expiry_exit' ? '#f59e0b' : '#60a5fa',
+                  border: `1px solid ${ec.currentRule === 'stop_loss' ? '#5a1a1a' : ec.currentRule === 'expiry_exit' ? '#4a2a00' : '#1a2a4a'}`,
+                }}>
+                  ⚡ Would trigger: {ec.currentRule.replace('_', '-')} on next tick
+                </span>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Position story */}
         <div style={{
@@ -247,7 +343,7 @@ export default async function PositionsPage() {
           <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 'max-content', gap: '0' }}>
             {/* t0 entry */}
             <TimelineNode
-              label="כניסה"
+              label="Entry"
               color="#d4f25a"
               line1={`${(Number(p.avg_entry_price||p.open_price)*100).toFixed(1)}%`}
               line2={`$${Number(p.cost_basis_usd).toFixed(0)}`}
@@ -256,7 +352,7 @@ export default async function PositionsPage() {
               <TimelineNode
                 key={t.id}
                 label={`t${t.tick_number}`}
-                sublabel={ACTION_LABELS_HE[t.action] ?? t.action}
+                sublabel={ACTION_LABELS[t.action] ?? t.action}
                 color={ACTION_COLORS[t.action] ?? '#555'}
                 line1={`${(Number(t.market_price)*100).toFixed(1)}%`}
                 line2={t.unrealized_pnl != null ? pnlStr(Number(t.unrealized_pnl)) : undefined}
@@ -266,7 +362,7 @@ export default async function PositionsPage() {
             ))}
             {p.status === 'closed' && ticks.length > 0 && (
               <TimelineNode
-                label="סגירה"
+                label="Close"
                 color={pnlColor(rlz)}
                 line1={pnlStr(rlz)}
                 connector
@@ -274,7 +370,7 @@ export default async function PositionsPage() {
             )}
             {ticks.length === 0 && (
               <div style={{ fontSize: '0.62rem', color: '#2a2a2a', paddingLeft: '16px', alignSelf: 'center' }}>
-                ממתינה לטיק הבא (03:00 UTC)
+                Waiting for next tick — auto-managed
               </div>
             )}
           </div>
@@ -290,10 +386,10 @@ export default async function PositionsPage() {
       {/* Summary bar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '28px', flexWrap: 'wrap' }}>
         {[
-          { label: 'פוזיציות פתוחות', value: String(openPositions.length), color: '#d4f25a' },
-          { label: 'פוזיציות סגורות', value: String(closedPositions.length), color: '#888' },
-          { label: 'לא ממומש', value: `${totalUnrealized >= 0 ? '+' : '-'}$${Math.abs(totalUnrealized).toFixed(2)}`, color: pnlColor(totalUnrealized) },
-          { label: 'ממומש (סגורים)', value: `${totalRealized >= 0 ? '+' : '-'}$${Math.abs(totalRealized).toFixed(2)}`, color: pnlColor(totalRealized) },
+          { label: 'Open Positions', value: String(openPositions.length), color: '#d4f25a' },
+          { label: 'Closed Positions', value: String(closedPositions.length), color: '#888' },
+          { label: 'Unrealized', value: `${totalUnrealized >= 0 ? '+' : '-'}$${Math.abs(totalUnrealized).toFixed(2)}`, color: pnlColor(totalUnrealized) },
+          { label: 'Realized (closed)', value: `${totalRealized >= 0 ? '+' : '-'}$${Math.abs(totalRealized).toFixed(2)}`, color: pnlColor(totalRealized) },
         ].map(card => (
           <div key={card.label} style={{
             background: '#0e0e0e', border: '1px solid #1e1e1e',
@@ -308,12 +404,12 @@ export default async function PositionsPage() {
       {/* Open Positions */}
       <section style={{ marginBottom: '40px' }}>
         <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#888', margin: '0 0 14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          פוזיציות פתוחות ({openPositions.length})
+          Open Positions ({openPositions.length})
         </h2>
         {openPositions.length === 0 ? (
           <div style={{ padding: '28px', textAlign: 'center', color: '#444', fontSize: '0.82rem',
             background: '#0e0e0e', border: '1px solid #1a1a1a', borderRadius: '8px' }}>
-            אין פוזיציות פתוחות.
+            No open positions.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -332,12 +428,12 @@ export default async function PositionsPage() {
       {/* Closed Positions */}
       <section>
         <h2 style={{ fontSize: '0.82rem', fontWeight: 600, color: '#555', margin: '0 0 14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          פוזיציות סגורות ({closedPositions.length})
+          Closed Positions ({closedPositions.length})
         </h2>
         {closedPositions.length === 0 ? (
           <div style={{ padding: '28px', textAlign: 'center', color: '#333', fontSize: '0.82rem',
             background: '#0a0a0a', border: '1px solid #151515', borderRadius: '8px' }}>
-            אין פוזיציות סגורות.
+            No closed positions.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
