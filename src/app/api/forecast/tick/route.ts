@@ -8,7 +8,7 @@
  *
  * Called two ways:
  *   GET  — by Vercel Cron (Authorization: Bearer $CRON_SECRET)
- *           Schedule: every 15 minutes (*/15 * * * *)
+ *           Schedule: every 15 minutes — cron: "* /15 * * * *" (no space)
  *   POST — manually by admin (x-admin-password: $ADMIN_PASSWORD)
  *
  * After each run an audit event (event_type='tick_cycle') is written to
