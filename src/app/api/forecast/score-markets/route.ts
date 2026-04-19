@@ -24,12 +24,12 @@ export async function POST(request: NextRequest) {
       'status=eq.active&select=id,title,category,current_yes_price,volume_usd,close_time&limit=200',
     );
 
-    // Score markets in parallel (news count fetched in batches of 5)
+    // Score markets in parallel (news count fetched per market)
     const scored = await Promise.all(
       markets.map(async (m) => {
         const mDomain = detectDomain(m.title, m.category);
         const newsCount = mDomain === domain ? await getNewsCountOnly(m.title, domain).catch(() => 0) : 0;
-        return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain };
+        return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain, newsCount };
       })
     );
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const selectedIds = new Set(selected.map(s => s.marketId));
 
     // Upsert all scores
-    const rows = scored.map(({ scored: s, market: m, domain: d }) => ({
+    const rows = scored.map(({ scored: s, market: m, domain: d, newsCount: nc }) => ({
       market_id:         m.id,
       domain:            d,
       score:             s.score,
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       timing_score:      s.breakdown.timingScore,
       price_score:       s.breakdown.priceScore,
       news_score:        s.breakdown.newsScore,
-      news_count:        0,
+      news_count:        nc,
       is_selected:       selectedIds.has(m.id),
       selection_rank:    selectedIds.has(m.id) ? selected.findIndex(sel => sel.marketId === m.id) + 1 : null,
       eligible:          s.eligible,

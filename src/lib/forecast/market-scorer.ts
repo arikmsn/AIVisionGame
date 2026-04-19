@@ -23,10 +23,10 @@ export function detectDomain(title: string, category: string | null): string {
 // Eligibility constants
 const MIN_VOLUME_USD = 500;
 const MIN_HOURS_LEFT = 2;
-const MAX_HOURS_LEFT = 30 * 24;
-const MIN_YES_PRICE  = 0.04;
-const MAX_YES_PRICE  = 0.96;
-export const MIN_SCORE = 25;
+const MAX_HOURS_LEFT = 120 * 24; // 120 days — covers full playoff/tournament seasons
+const MIN_YES_PRICE  = 0.03;     // lowered: many Finals markets at 0.3-1%
+const MAX_YES_PRICE  = 0.97;
+export const MIN_SCORE = 20;     // lowered: long-window markets score less on timing
 
 // Sub-scorers — each returns [score, tags[]]
 function scoreVolume(vol: number): [number, string[]] {
@@ -48,7 +48,9 @@ function scoreTiming(closeTime: string | null): [number, string[]] {
   if (h < 168)  return [20, []];
   if (h < 336)  return [14, []];
   if (h < 720)  return [7,  []];
-  return [2, ['far-expiry']];
+  if (h < 1440) return [4,  ['long-window']];   // 30–60 days
+  if (h < 2160) return [3,  ['long-window']];   // 60–90 days
+  return [2, ['far-expiry']];                   // 90–120 days
 }
 
 function scorePrice(p: number): [number, string[]] {

@@ -251,12 +251,13 @@ export function decideTickAction(
     return 'scale_out';
   }
 
-  // 4. Scale-in (add to winning edge)
+  // 4. Scale-in (add to a modestly-winning position with room to run)
+  // Only fire when we're 0–8% in profit: thesis is holding but not yet peaking.
+  // Prevents adding to already-massive winners (e.g. 60% unrealized) or losers.
   if (pos.scale_in_count === 0 && pos.tick_count <= SCALE_IN_MAX_TICKS) {
-    const stillHasEdge = pos.side === 'long'
-      ? currentPrice - pos.avg_entry_price > -SCALE_IN_EDGE_THRESHOLD  // price hasn't moved against us by >8%
-      : pos.avg_entry_price - currentPrice > -SCALE_IN_EDGE_THRESHOLD;
-    if (stillHasEdge) return 'scale_in';
+    if (unrealizedPct >= 0 && unrealizedPct < SCALE_IN_EDGE_THRESHOLD) {
+      return 'scale_in';
+    }
   }
 
   return 'hold';

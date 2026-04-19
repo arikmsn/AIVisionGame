@@ -121,16 +121,16 @@ export async function scoreMarketsAction(domain = 'sports', topN = 5): Promise<A
 
     const scored = await Promise.all(
       markets.map(async (m) => {
-        const mDomain = detectDomain(m.title, m.category);
+        const mDomain  = detectDomain(m.title, m.category);
         const newsCount = mDomain === domain ? await getNewsCountOnly(m.title, domain).catch(() => 0) : 0;
-        return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain };
+        return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain, newsCount };
       })
     );
 
     const selected = selectTopMarkets(scored.map(s => s.scored), topN);
     const selectedIds = new Set(selected.map(s => s.marketId));
 
-    const rows = scored.map(({ scored: s, market: m, domain: d }) => ({
+    const rows = scored.map(({ scored: s, market: m, domain: d, newsCount: nc }) => ({
       market_id:         m.id,
       domain:            d,
       score:             s.score,
@@ -139,7 +139,7 @@ export async function scoreMarketsAction(domain = 'sports', topN = 5): Promise<A
       timing_score:      s.breakdown.timingScore,
       price_score:       s.breakdown.priceScore,
       news_score:        s.breakdown.newsScore,
-      news_count:        0,
+      news_count:        nc,
       is_selected:       selectedIds.has(m.id),
       selection_rank:    selectedIds.has(m.id) ? selected.findIndex(sel => sel.marketId === m.id) + 1 : null,
       eligible:          s.eligible,
@@ -212,17 +212,17 @@ export async function runDailyCycleAction(): Promise<ActionResult> {
     );
     const domain = 'sports'; const topN = 5;
     const scored = await Promise.all(markets.map(async (m) => {
-      const mDomain = detectDomain(m.title, m.category);
+      const mDomain   = detectDomain(m.title, m.category);
       const newsCount = mDomain === domain ? await getNewsCountOnly(m.title, domain).catch(() => 0) : 0;
-      return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain };
+      return { scored: scoreMarket(m, newsCount), market: m, domain: mDomain, newsCount };
     }));
     const selected    = selectTopMarkets(scored.map(s => s.scored), topN);
     const selectedIds = new Set(selected.map(s => s.marketId));
-    const scoreRows   = scored.map(({ scored: s, market: m, domain: d }) => ({
+    const scoreRows   = scored.map(({ scored: s, market: m, domain: d, newsCount: nc }) => ({
       market_id: m.id, domain: d, score: s.score, tags: s.tags,
       volume_score: s.breakdown.volumeScore, timing_score: s.breakdown.timingScore,
       price_score: s.breakdown.priceScore, news_score: s.breakdown.newsScore,
-      news_count: 0, is_selected: selectedIds.has(m.id),
+      news_count: nc, is_selected: selectedIds.has(m.id),
       selection_rank: selectedIds.has(m.id) ? selected.findIndex(sel => sel.marketId === m.id) + 1 : null,
       eligible: s.eligible, ineligible_reason: s.reason ?? null, scored_at: new Date().toISOString(),
     }));
@@ -344,19 +344,20 @@ export async function runLatestRoundAction(): Promise<ActionResult> {
     let positionsOpened = 0;
 
     if (marketPrice > 0) {
+      // Use central bankroll (shared pool) — not per-agent wallets
+      const bankrollRows = await faSelect<{ available_usd: number }>(
+        'fa_central_bankroll', 'select=available_usd&limit=1',
+      );
+      const balance = bankrollRows[0] ? Number(bankrollRows[0].available_usd) : 60000;
+
       for (const sub of succeeded) {
         if (!sub.submissionId || sub.probabilityYes == null) continue;
         const agents = await faSelect<{ id: string }>(
           'fa_agents', `slug=eq.${sub.agentSlug}&select=id`,
         );
         if (!agents[0]) continue;
-        const agentId = agents[0].id;
-        const wallets = await faSelect<{ paper_balance_usd: number }>(
-          'fa_agent_wallets', `agent_id=eq.${agentId}&select=paper_balance_usd`,
-        );
-        const balance = wallets[0] ? Number(wallets[0].paper_balance_usd) : 10000;
         const posId = await openPosition({
-          agentId, agentSlug: sub.agentSlug, marketId: round.market_id,
+          agentId: agents[0].id, agentSlug: sub.agentSlug, marketId: round.market_id,
           roundId, submissionId: sub.submissionId,
           agentProbYes: sub.probabilityYes, marketPrice, walletBalance: balance,
         }).catch(() => null);
