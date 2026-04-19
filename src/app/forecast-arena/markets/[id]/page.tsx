@@ -79,6 +79,16 @@ export default async function MarketDetailPage({
       {/* ── Market header ── */}
       <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginTop: '12px', color: '#f0f0f0', lineHeight: 1.4 }}>
         {market.title}
+        {market.domain && (
+          <span style={{
+            marginLeft: '10px', fontSize: '0.55rem', fontWeight: 600,
+            color: '#d4f25a', background: '#1a1f0d', border: '1px solid #2a3010',
+            padding: '3px 8px', borderRadius: '10px', textTransform: 'uppercase',
+            letterSpacing: '0.07em', verticalAlign: 'middle',
+          }}>
+            {market.domain}
+          </span>
+        )}
       </h2>
 
       <div style={{ display: 'flex', gap: '24px', marginTop: '10px', fontSize: '0.8rem', flexWrap: 'wrap' }}>

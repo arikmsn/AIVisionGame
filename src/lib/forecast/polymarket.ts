@@ -9,6 +9,7 @@
  */
 
 import { faInsert, faUpsert, faSelect, faPatch } from './db';
+import { classifyMarketDomain } from './domains';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,12 @@ export async function syncMarketsToDb(limit = 50): Promise<{
         const volume = extractVolume(m);
         const closeTime = extractCloseTime(m);
 
+        // Domain is computed unconditionally, but written via a separate
+        // PATCH after insert/upsert so we don't break on deployments that
+        // race ahead of migration 015. Remove this split once 015 has
+        // landed on every environment.
+        const domainLabel = classifyMarketDomain(title, m.category ?? null);
+
         const row: Record<string, unknown> = {
           external_id:      externalId,
           source:           'polymarket',
@@ -193,6 +200,8 @@ export async function syncMarketsToDb(limit = 50): Promise<{
         if (existingMap.has(externalId)) {
           // Update
           await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, row);
+          // Best-effort domain tag (silent if column not yet present)
+          await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, { domain: domainLabel }).catch(() => {});
           result.updated++;
 
           // Also insert snapshot
@@ -211,6 +220,8 @@ export async function syncMarketsToDb(limit = 50): Promise<{
             result.inserted++;
             const marketId = (inserted[0] as any).id;
             existingMap.set(externalId, marketId);
+            // Best-effort domain tag (silent if column not yet present)
+            await faPatch('fa_markets', { id: marketId }, { domain: domainLabel }).catch(() => {});
 
             // Snapshot
             await faInsert('fa_market_snapshots', [{

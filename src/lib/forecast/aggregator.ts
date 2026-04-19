@@ -23,6 +23,17 @@
  *   Set weight_i > 1 for historically profitable models and weight_i < 1
  *   for consistently loss-making ones. The aggregation formula is
  *   identical; only the weights change.
+ *
+ * TODO (empirical weights — Manus §8.8):
+ *   The calibration store (fa_model_calibration) now records per-agent,
+ *   per-domain, per-window (30d / 90d / all) Brier/log-loss/hit-rate.
+ *   Once every agent has ≥ 30 resolutions in a domain, call
+ *     getCalibrationWeight(agentId, domain, '90d')
+ *   from src/lib/forecast/calibration.ts and use it as ModelVote.weight
+ *   instead of the hard-coded 1.0 at the call sites (run-round,
+ *   daily-cycle, light-cycle). Keep the cold-start default at 1.0.
+ *   Live trading weights are unchanged in v1 — calibration is
+ *   diagnostic-only until this TODO is resolved.
  */
 
 // ── Thresholds & constants ────────────────────────────────────────────────────

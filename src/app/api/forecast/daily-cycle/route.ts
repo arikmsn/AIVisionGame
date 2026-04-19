@@ -21,6 +21,8 @@ import { getNewsCountOnly, getOrRefreshContext, getActiveProvider } from '@/lib/
 import { runAllAgentsOnRound }            from '@/lib/forecast/runner';
 import { openSystemPosition, runTickCycle } from '@/lib/forecast/positions';
 import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast/aggregator';
+import { rolloverWindows }                 from '@/lib/forecast/calibration';
+import { computeBenchmarks }                from '@/lib/forecast/benchmarks';
 
 export const maxDuration = 300; // 5 min — full cycle can be slow
 
@@ -120,7 +122,7 @@ async function stepRefreshContext(domain = 'sports'): Promise<{ ok: boolean; ref
     let refreshed = 0;
     for (const m of markets) {
       const mDomain = detectDomain(m.title, m.category);
-      await getOrRefreshContext(m.id, m.title, mDomain === 'general' ? domain : mDomain).catch(() => null);
+      await getOrRefreshContext(m.id, m.title, (mDomain === 'general' || mDomain === 'other') ? domain : mDomain).catch(() => null);
       refreshed++;
     }
 
@@ -264,20 +266,46 @@ async function stepTick(): Promise<{ ok: boolean; processed: number; error?: str
   }
 }
 
+// ── Calibration rollover + benchmarks (diagnostic only, never blocks) ─────────
+
+async function stepCalibrationRollover(): Promise<{ ok: boolean; upserted: number; error?: string }> {
+  try {
+    const r = await rolloverWindows();
+    console.log(`[DAILY] Step 6 calibration: upserted=${r.upserted} windows=${r.windows.join(',')}`);
+    return { ok: !r.error, upserted: r.upserted, error: r.error };
+  } catch (err: any) {
+    console.error('[DAILY] Step 6 calibration error:', err?.message);
+    return { ok: false, upserted: 0, error: err?.message };
+  }
+}
+
+async function stepBenchmarks(): Promise<{ ok: boolean; rows: number; error?: string }> {
+  try {
+    const r = await computeBenchmarks('90d');
+    console.log(`[DAILY] Step 7 benchmarks: rows=${r.rows}`);
+    return { ok: !r.error, rows: r.rows, error: r.error };
+  } catch (err: any) {
+    console.error('[DAILY] Step 7 benchmarks error:', err?.message);
+    return { ok: false, rows: 0, error: err?.message };
+  }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 async function runDailyCycle(trigger: string) {
   const t0 = Date.now();
   console.log(`[DAILY] Cycle started (trigger=${trigger})`);
 
-  const sync    = await stepSyncMarkets();
-  const score   = await stepScoreMarkets();
-  const context = await stepRefreshContext();
-  const rounds  = await stepRunRounds();
-  const tick    = await stepTick();
+  const sync        = await stepSyncMarkets();
+  const score       = await stepScoreMarkets();
+  const context     = await stepRefreshContext();
+  const rounds      = await stepRunRounds();
+  const tick        = await stepTick();
+  const calibration = await stepCalibrationRollover();
+  const benchmarks  = await stepBenchmarks();
 
   const elapsedMs = Date.now() - t0;
-  const steps     = { sync, score, context, rounds, tick };
+  const steps     = { sync, score, context, rounds, tick, calibration, benchmarks };
   const allOk     = Object.values(steps).every(s => s.ok);
 
   // Record in audit log

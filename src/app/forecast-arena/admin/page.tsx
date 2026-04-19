@@ -57,14 +57,15 @@ export default async function AdminPage() {
   let syncJobs:       any[] = [];
   let auditEvents:    any[] = [];
   let marketContexts: any[] = [];
+  let benchmarks:     any[] = [];
 
   const activeProvider    = getActiveProvider();
   const activeProviderKey = PROVIDER_KEY_ENV[activeProvider];
   const activeKeyPresent  = !!process.env[activeProviderKey];
 
   try {
-    [markets, rounds, submissions, agents, scores, syncJobs, auditEvents, marketContexts] = await Promise.all([
-      sfetch('fa_markets?select=id,status').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+    [markets, rounds, submissions, agents, scores, syncJobs, auditEvents, marketContexts, benchmarks] = await Promise.all([
+      sfetch('fa_markets?select=id,status,domain').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_rounds?select=id,status,opened_at').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_submissions?select=id,cost_usd,error_text,agent_id,submitted_at&limit=2000').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_agents?select=id,slug,display_name,model_id,provider,is_active').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
@@ -72,6 +73,7 @@ export default async function AdminPage() {
       sfetch('fa_sync_jobs?select=*&order=started_at.desc&limit=10').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_audit_events?select=*&order=created_at.desc&limit=40').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_market_context?select=market_id,last_updated_at,provider').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+      sfetch('fa_benchmarks?window=eq.90d&order=computed_at.desc&limit=500&select=*').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
     ]);
   } catch { /* ok */ }
 
@@ -98,6 +100,35 @@ export default async function AdminPage() {
   for (const s of submissions) {
     if (!costByAgent.has(s.agent_id)) costByAgent.set(s.agent_id, 0);
     costByAgent.set(s.agent_id, costByAgent.get(s.agent_id)! + Number(s.cost_usd || 0));
+  }
+
+  // ── Markets by domain (visibility for the new domain column) ──
+  const domainCounts: Record<string, number> = {};
+  for (const m of markets) {
+    const d = m.domain ?? '(null)';
+    domainCounts[d] = (domainCounts[d] ?? 0) + 1;
+  }
+  const domainEntries = Object.entries(domainCounts).sort((a, b) => b[1] - a[1]);
+
+  // ── Benchmarks: keep latest row per (domain, baseline) ──
+  const bmSeen = new Set<string>();
+  const bmLatest: any[] = [];
+  for (const b of benchmarks) {
+    const k = `${b.domain}::${b.baseline}`;
+    if (bmSeen.has(k)) continue;
+    bmSeen.add(k);
+    bmLatest.push(b);
+  }
+  // Pivot: row per domain; columns for market / ensemble / best_single
+  const bmByDomain = new Map<string, {
+    market?: any; ensemble?: any; best_single?: any;
+  }>();
+  for (const b of bmLatest) {
+    const cur = bmByDomain.get(b.domain) ?? {};
+    if (b.baseline === 'market')      cur.market      = b;
+    if (b.baseline === 'ensemble')    cur.ensemble    = b;
+    if (b.baseline === 'best_single') cur.best_single = b;
+    bmByDomain.set(b.domain, cur);
   }
 
   const EVENT_COLORS: Record<string, string> = {
@@ -142,6 +173,83 @@ export default async function AdminPage() {
             </div>
           ))}
         </div>
+      </Section>
+
+      {/* ── Markets by Domain ── */}
+      <Section title="Markets by Domain">
+        {domainEntries.length === 0 ? (
+          <p style={{ color: '#3a3a3a', fontSize: '0.72rem' }}>No markets.</p>
+        ) : (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {domainEntries.map(([dom, n]) => (
+              <div key={dom} style={{
+                background: dom === '(null)' ? '#1a0d0d' : '#0e0e0e',
+                border: `1px solid ${dom === '(null)' ? '#3a1212' : '#1a1a1a'}`,
+                borderRadius: '5px', padding: '6px 12px', minWidth: '92px',
+              }}>
+                <div style={{ fontSize: '0.58rem', color: dom === '(null)' ? '#f87171' : '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{dom}</div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#888', marginTop: '3px' }}>{n}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <p style={{ marginTop: '8px', fontSize: '0.62rem', color: '#2e2e2e' }}>
+          Null domains → run <code style={{ color: '#555' }}>POST /api/forecast/admin/backfill-domains</code>
+        </p>
+      </Section>
+
+      {/* ── Benchmarks (Manus §8.3) ── */}
+      <Section title="Benchmarks (90d, per domain) — Brier (lower is better)">
+        {bmByDomain.size === 0 ? (
+          <p style={{ color: '#3a3a3a', fontSize: '0.72rem' }}>
+            No benchmarks yet. Run <code style={{ color: '#555' }}>POST /api/forecast/benchmarks</code> once
+            resolutions exist.
+          </p>
+        ) : (
+          <div style={{ border: '1px solid #141414', borderRadius: '6px', overflow: 'hidden' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+              <thead>
+                <tr>
+                  {['Domain', 'Market Brier', 'Ensemble Brier', 'Best Single', 'n (ensemble)'].map(h => (
+                    <th key={h} style={TH}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...bmByDomain.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([dom, cols]) => {
+                  const m  = cols.market;
+                  const en = cols.ensemble;
+                  const bs = cols.best_single;
+                  const fmt = (x: any) => x?.brier_score != null ? Number(x.brier_score).toFixed(4) : '—';
+                  const ensembleBeatsMarket = m?.brier_score != null && en?.brier_score != null
+                    && Number(en.brier_score) < Number(m.brier_score);
+                  return (
+                    <tr key={dom} style={{ borderBottom: '1px solid #111' }}>
+                      <td style={{ ...TD, color: '#d4f25a', fontWeight: 600 }}>{dom}</td>
+                      <td style={{ ...TD, color: '#888' }}>{fmt(m)}</td>
+                      <td style={{ ...TD, color: ensembleBeatsMarket ? '#4ade80' : '#a88', fontWeight: 600 }}>
+                        {fmt(en)}
+                      </td>
+                      <td style={{ ...TD, color: '#888' }}>
+                        {fmt(bs)}
+                        {bs?.baseline_detail && (
+                          <span style={{ marginLeft: '6px', color: '#555', fontSize: '0.62rem' }}>
+                            ({bs.baseline_detail})
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...TD, color: '#666' }}>{en?.n_resolved ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ marginTop: '8px', fontSize: '0.62rem', color: '#2e2e2e' }}>
+          Diagnostic only — does not affect live aggregator weights (yet).
+          Green = ensemble beats market on Brier.
+        </p>
       </Section>
 
       {/* ── News Context ── */}

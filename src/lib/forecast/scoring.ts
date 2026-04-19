@@ -129,6 +129,20 @@ export async function scoreRound(
     },
   }]);
 
+  // ── Calibration hook ──────────────────────────────────────────────────────
+  // Write per-submission calibration events. Failures do not block resolution.
+  try {
+    const { recordCalibrationOnResolve } = await import('./calibration');
+    const calib = await recordCalibrationOnResolve(roundId, outcome);
+    if (calib.error) {
+      console.warn(`[FA/SCORING] calibration hook warning: ${calib.error}`);
+    } else {
+      console.log(`[FA/SCORING] calibration: recorded ${calib.recorded} events`);
+    }
+  } catch (err: any) {
+    console.error('[FA/SCORING] calibration hook failed (non-blocking):', err?.message ?? err);
+  }
+
   console.log(`[FA/SCORING] Round ${roundId} scored: ${result.scored} submissions, outcome=${outcome}`);
   return result;
 }

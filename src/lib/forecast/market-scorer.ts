@@ -6,18 +6,15 @@
 
 export const PILOT_DOMAIN = 'sports' as const;
 
-export const DOMAIN_KEYWORDS: Record<string, string[]> = {
-  sports: ['nba', 'nfl', 'nhl', 'mlb', 'soccer', 'football', 'basketball', 'hockey', 'baseball', 'sport', 'game', 'match', 'playoff', 'championship', 'finals', 'team', 'player', 'season'],
-  politics: ['election', 'president', 'senate', 'congress', 'vote', 'democrat', 'republican', 'poll', 'candidate', 'governor', 'referendum'],
-  crypto: ['bitcoin', 'ethereum', 'btc', 'eth', 'crypto', 'token', 'blockchain', 'defi', 'solana'],
-};
+// Domain classification now lives in a single source of truth (domains.ts)
+// so fa_markets.domain, fa_market_scores.domain, fa_calibration_events.domain
+// and fa_benchmarks.domain all use identical labels.
+import { classifyMarketDomain, DOMAIN_KEYWORDS as CANONICAL_KEYWORDS } from './domains';
+
+export const DOMAIN_KEYWORDS = CANONICAL_KEYWORDS;
 
 export function detectDomain(title: string, category: string | null): string {
-  const text = `${title} ${category ?? ''}`.toLowerCase();
-  for (const [domain, kws] of Object.entries(DOMAIN_KEYWORDS)) {
-    if (kws.some(k => text.includes(k))) return domain;
-  }
-  return 'general';
+  return classifyMarketDomain(title, category);
 }
 
 // Eligibility constants
