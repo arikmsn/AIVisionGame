@@ -163,6 +163,90 @@ function extractVolume(m: any): number {
 
 // ── Sync to DB ───────────────────────────────────────────────────────────────
 
+/**
+ * Core upsert loop: takes a pre-fetched array of Polymarket market objects
+ * and upserts them into fa_markets + fa_market_snapshots.
+ * Returns { inserted, updated, errors } without creating a sync_job record.
+ * Used by syncMarketsToDb (which wraps it with job tracking) and by
+ * targeted-sync routes that pre-fetch from specific categories.
+ */
+export async function syncMarketsFromList(markets: any[]): Promise<{
+  inserted: number;
+  updated: number;
+  errors: string[];
+}> {
+  const result = { inserted: 0, updated: 0, errors: [] as string[] };
+
+  // Get existing markets to determine insert vs update
+  const existing = await faSelect<{ external_id: string; id: string }>(
+    'fa_markets',
+    'select=external_id,id&source=eq.polymarket',
+  );
+  const existingMap = new Map(existing.map(e => [e.external_id, e.id]));
+
+  for (const m of markets) {
+    try {
+      const externalId = extractExternalId(m);
+      if (!externalId) {
+        result.errors.push(`Market missing external_id: ${JSON.stringify(m).slice(0, 100)}`);
+        continue;
+      }
+
+      const title     = m.question ?? (m as any).title ?? 'Untitled';
+      const yesPrice  = extractYesPrice(m);
+      const volume    = extractVolume(m);
+      const closeTime = extractCloseTime(m);
+      const domainLabel = classifyMarketDomain(title, m.category ?? null);
+
+      const row: Record<string, unknown> = {
+        external_id:       externalId,
+        source:            'polymarket',
+        title,
+        category:          m.category ?? null,
+        description:       (m.description ?? '').slice(0, 5000),
+        close_time:        closeTime,
+        status:            m.closed ? 'closed' : (m.active ? 'active' : 'inactive'),
+        current_yes_price: yesPrice,
+        volume_usd:        volume,
+        updated_at:        new Date().toISOString(),
+        metadata_json: { slug: m.slug, image: m.image, outcomes: m.outcomes },
+      };
+
+      if (existingMap.has(externalId)) {
+        await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, row);
+        await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, { domain: domainLabel }).catch(() => {});
+        result.updated++;
+        const marketId = existingMap.get(externalId)!;
+        await faInsert('fa_market_snapshots', [{
+          market_id:  marketId,
+          yes_price:  yesPrice,
+          no_price:   yesPrice != null ? (1 - yesPrice) : null,
+          volume_usd: volume,
+        }]);
+      } else {
+        row.created_at = new Date().toISOString();
+        const inserted = await faInsert('fa_markets', [row], { returning: true });
+        if (Array.isArray(inserted) && inserted[0]) {
+          result.inserted++;
+          const marketId = (inserted[0] as any).id;
+          existingMap.set(externalId, marketId);
+          await faPatch('fa_markets', { id: marketId }, { domain: domainLabel }).catch(() => {});
+          await faInsert('fa_market_snapshots', [{
+            market_id:  marketId,
+            yes_price:  yesPrice,
+            no_price:   yesPrice != null ? (1 - yesPrice) : null,
+            volume_usd: volume,
+          }]);
+        }
+      }
+    } catch (err: any) {
+      result.errors.push(`Market upsert error: ${err?.message ?? err}`);
+    }
+  }
+
+  return result;
+}
+
 export async function syncMarketsToDb(limit = 50): Promise<{
   inserted: number;
   updated: number;
@@ -183,89 +267,11 @@ export async function syncMarketsToDb(limit = 50): Promise<{
     const markets = await fetchActiveMarkets(limit, 0);
     console.log(`[FA/POLY] Fetched ${markets.length} markets from Polymarket`);
 
-    // Get existing markets to determine insert vs update
-    const existing = await faSelect<{ external_id: string; id: string }>(
-      'fa_markets',
-      'select=external_id,id&source=eq.polymarket',
-    );
-    const existingMap = new Map(existing.map(e => [e.external_id, e.id]));
-
-    for (const m of markets) {
-      try {
-        const externalId = extractExternalId(m);
-        if (!externalId) {
-          result.errors.push(`Market missing external_id: ${JSON.stringify(m).slice(0, 100)}`);
-          continue;
-        }
-
-        const title = m.question ?? (m as any).title ?? 'Untitled';
-        const yesPrice = extractYesPrice(m);
-        const volume = extractVolume(m);
-        const closeTime = extractCloseTime(m);
-
-        // Domain is computed unconditionally, but written via a separate
-        // PATCH after insert/upsert so we don't break on deployments that
-        // race ahead of migration 015. Remove this split once 015 has
-        // landed on every environment.
-        const domainLabel = classifyMarketDomain(title, m.category ?? null);
-
-        const row: Record<string, unknown> = {
-          external_id:      externalId,
-          source:           'polymarket',
-          title,
-          category:         m.category ?? null,
-          description:      (m.description ?? '').slice(0, 5000),
-          close_time:       closeTime,
-          status:           m.closed ? 'closed' : (m.active ? 'active' : 'inactive'),
-          current_yes_price: yesPrice,
-          volume_usd:       volume,
-          updated_at:       new Date().toISOString(),
-          metadata_json:    {
-            slug:     m.slug,
-            image:    m.image,
-            outcomes: m.outcomes,
-          },
-        };
-
-        if (existingMap.has(externalId)) {
-          // Update
-          await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, row);
-          // Best-effort domain tag (silent if column not yet present)
-          await faPatch('fa_markets', { external_id: externalId, source: 'polymarket' }, { domain: domainLabel }).catch(() => {});
-          result.updated++;
-
-          // Also insert snapshot
-          const marketId = existingMap.get(externalId)!;
-          await faInsert('fa_market_snapshots', [{
-            market_id:  marketId,
-            yes_price:  yesPrice,
-            no_price:   yesPrice != null ? (1 - yesPrice) : null,
-            volume_usd: volume,
-          }]);
-        } else {
-          // Insert
-          row.created_at = new Date().toISOString();
-          const inserted = await faInsert('fa_markets', [row], { returning: true });
-          if (Array.isArray(inserted) && inserted[0]) {
-            result.inserted++;
-            const marketId = (inserted[0] as any).id;
-            existingMap.set(externalId, marketId);
-            // Best-effort domain tag (silent if column not yet present)
-            await faPatch('fa_markets', { id: marketId }, { domain: domainLabel }).catch(() => {});
-
-            // Snapshot
-            await faInsert('fa_market_snapshots', [{
-              market_id:  marketId,
-              yes_price:  yesPrice,
-              no_price:   yesPrice != null ? (1 - yesPrice) : null,
-              volume_usd: volume,
-            }]);
-          }
-        }
-      } catch (err: any) {
-        result.errors.push(`Market sync error: ${err?.message ?? err}`);
-      }
-    }
+    // Delegate to shared upsert helper
+    const upsertResult = await syncMarketsFromList(markets);
+    result.inserted = upsertResult.inserted;
+    result.updated  = upsertResult.updated;
+    result.errors.push(...upsertResult.errors);
 
     // Complete sync job
     if (jobId) {

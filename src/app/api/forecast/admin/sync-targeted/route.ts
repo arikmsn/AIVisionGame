@@ -10,9 +10,8 @@
  * Body: { limitPerCategory?: number }  (default 30)
  */
 
-import { NextRequest, NextResponse } from 'next/server';
-import { fetchTargetedMarkets }      from '@/lib/forecast/polymarket';
-import { syncMarketsToDb }           from '@/lib/forecast/polymarket';
+import { NextRequest, NextResponse }                  from 'next/server';
+import { fetchTargetedMarkets, syncMarketsFromList }  from '@/lib/forecast/polymarket';
 
 export const maxDuration = 60;
 export const dynamic    = 'force-dynamic';
@@ -39,23 +38,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Re-use syncMarketsToDb internals via the same upsert path.
-    // We call it with a high limit so it pulls all available; the targeted
-    // fetch already filtered to our categories. For now, just run a standard
-    // sync (which will pick up the new markets on next re-run), and report
-    // the targeted fetch count.
-    //
-    // TODO: expose syncMarketsFromList(markets[]) to avoid a second API call.
-    // For now trigger a standard sync pass immediately after the targeted fetch
-    // to ensure the DB is up to date.
-    const syncResult = await syncMarketsToDb(200);
+    // Directly upsert the targeted markets (no second full fetch).
+    const syncResult = await syncMarketsFromList(markets);
 
     return NextResponse.json({
-      ok:        !syncResult.errors.length,
+      ok:               !syncResult.errors.length,
       targeted_fetched: markets.length,
-      inserted:  syncResult.inserted,
-      updated:   syncResult.updated,
-      errors:    syncResult.errors.slice(0, 10),
+      inserted:         syncResult.inserted,
+      updated:          syncResult.updated,
+      errors:           syncResult.errors.slice(0, 10),
     });
   } catch (err: any) {
     return NextResponse.json({
