@@ -61,32 +61,96 @@ export async function fetchActiveMarkets(limit = 50, offset = 0, category?: stri
   return Array.isArray(data) ? data : (data.markets ?? data.data ?? []);
 }
 
+// ── Events-based targeted fetch (CORRECT approach for domain filtering) ──────
+//
+// The /markets endpoint ignores `category=` — markets are sorted by volume
+// and filtering is not enforced. The /events endpoint supports `tag_slug=`
+// filtering and returns parent event objects that contain nested market arrays.
+// This is the only reliable way to pull politics/geopolitics/tech/crypto markets.
+//
+// Confirmed working tag slugs (2026-04-19):
+//   politics | geopolitics | crypto | tech | ai | science
+
 /**
- * Fetch markets across the thesis-aligned categories (politics, crypto, tech)
- * for domains where LLMs have genuine predictive edge. Used by the
- * targeted-sync admin route to counterbalance the sports-heavy default feed.
- *
- * Polymarket category strings (observed): "Politics", "Crypto", "Science",
- * "Pop Culture", "Sports", "Business & Finance", "News", "Tech & AI"
+ * Fetch all nested markets from a Polymarket events page filtered by tag slug.
+ * Uses GET /events?active=true&closed=false&tag_slug=SLUG.
  */
-export async function fetchTargetedMarkets(limitPerCategory = 30): Promise<PolymarketMarket[]> {
-  const THESIS_CATEGORIES = ['Politics', 'Crypto', 'Tech & AI', 'Business & Finance', 'News', 'Science'];
+export async function fetchMarketsFromEvents(
+  tagSlug:  string,
+  limit:    number = 50,
+  offset:   number = 0,
+): Promise<PolymarketMarket[]> {
+  const url = `${GAMMA_BASE}/events?active=true&closed=false&limit=${limit}&offset=${offset}&tag_slug=${encodeURIComponent(tagSlug)}`;
+  console.log(`[FA/POLY] fetchMarketsFromEvents tag=${tagSlug}: ${url}`);
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' },
+    signal:  AbortSignal.timeout(15_000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Polymarket events API ${res.status} (tag=${tagSlug}): ${text.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const events: any[] = Array.isArray(data) ? data : (data.events ?? data.data ?? []);
+
+  // Extract and flatten all nested markets, normalising field names
+  const markets: PolymarketMarket[] = [];
+  for (const ev of events) {
+    const nested: any[] = Array.isArray(ev.markets) ? ev.markets : [];
+    for (const m of nested) {
+      // Events endpoint uses conditionId + question; normalise to PolymarketMarket shape
+      markets.push({
+        ...m,
+        id:          m.conditionId ?? m.condition_id ?? m.id,
+        question:    m.question ?? ev.title,
+        description: m.description ?? ev.description ?? '',
+        category:    tagSlug,               // synthetic — inherit tag as category
+        active:      m.active ?? ev.active ?? true,
+        closed:      m.closed ?? ev.closed ?? false,
+        outcomePrices: m.outcomePrices ?? m.outcome_prices ?? [],
+        volume:      m.volume ?? ev.volume ?? 0,
+        endDate:     m.endDate ?? m.end_date_iso ?? ev.endDate,
+        tokens:      m.tokens,
+      } as PolymarketMarket);
+    }
+  }
+
+  console.log(`[FA/POLY] tag=${tagSlug}: ${events.length} events → ${markets.length} markets`);
+  return markets;
+}
+
+/**
+ * Fetch markets across ALL thesis-aligned tag slugs.
+ * Uses the /events endpoint which correctly filters by domain tag.
+ * Dedupes by conditionId so overlapping tags don't cause duplicates.
+ */
+export async function fetchTargetedMarkets(limitPerTag = 30): Promise<PolymarketMarket[]> {
+  // Ordered by priority — politics/geopolitics first so they fill the pool
+  const THESIS_TAGS = [
+    'politics',
+    'geopolitics',
+    'crypto',
+    'ai',
+    'tech',
+    'science',
+  ];
+
   const all: PolymarketMarket[] = [];
   const seen = new Set<string>();
 
-  for (const cat of THESIS_CATEGORIES) {
+  for (const tag of THESIS_TAGS) {
     try {
-      const markets = await fetchActiveMarkets(limitPerCategory, 0, cat);
+      const markets = await fetchMarketsFromEvents(tag, limitPerTag, 0);
       for (const m of markets) {
         const id = extractExternalId(m);
         if (id && !seen.has(id)) { seen.add(id); all.push(m); }
       }
     } catch (err: any) {
-      console.warn(`[FA/POLY] targeted fetch failed for category "${cat}": ${err?.message}`);
+      console.warn(`[FA/POLY] targeted fetch failed for tag "${tag}": ${err?.message}`);
     }
   }
 
-  console.log(`[FA/POLY] Targeted fetch: ${all.length} unique markets across ${THESIS_CATEGORIES.length} categories`);
+  console.log(`[FA/POLY] Targeted fetch complete: ${all.length} unique markets across ${THESIS_TAGS.length} tags`);
   return all;
 }
 

@@ -14,9 +14,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { syncMarketsToDb }                from '@/lib/forecast/polymarket';
+import { syncMarketsToDb, fetchTargetedMarkets, syncMarketsFromList } from '@/lib/forecast/polymarket';
 import { faInsert, faSelect, faUpsert }   from '@/lib/forecast/db';
-import { scoreMarket, selectTopMarkets, detectDomain, type MarketForScoring } from '@/lib/forecast/market-scorer';
+import {
+  scoreMarket, selectMarketsWithDomainBalance, detectDomain,
+  type MarketForScoring, type ScoredMarketWithDomain,
+} from '@/lib/forecast/market-scorer';
 import { getNewsCountOnly, getOrRefreshContext, getActiveProvider } from '@/lib/forecast/news-context';
 import { runAllAgentsOnRound }            from '@/lib/forecast/runner';
 import { openSystemPosition, runTickCycle } from '@/lib/forecast/positions';
@@ -42,9 +45,26 @@ function authorizeAdmin(req: NextRequest): boolean {
 
 async function stepSyncMarkets(): Promise<{ ok: boolean; inserted: number; updated: number; error?: string }> {
   try {
-    const r = await syncMarketsToDb(50);
-    console.log(`[DAILY] Step 1 sync: inserted=${r.inserted} updated=${r.updated}`);
-    return { ok: true, inserted: r.inserted, updated: r.updated };
+    // 1a. Standard volume-sorted sync (catches high-liquidity markets)
+    const r1 = await syncMarketsToDb(50);
+
+    // 1b. Targeted events-based sync (adds politics/geopolitics/tech/crypto/ai/science)
+    //     Runs best-effort — a failure here doesn't abort the cycle.
+    let targeted = { inserted: 0, updated: 0 };
+    try {
+      const tMarkets = await fetchTargetedMarkets(25); // 25 per tag × 6 tags
+      if (tMarkets.length > 0) {
+        const r2 = await syncMarketsFromList(tMarkets);
+        targeted = { inserted: r2.inserted, updated: r2.updated };
+      }
+    } catch (te: any) {
+      console.warn('[DAILY] Step 1 targeted sync failed (non-fatal):', te?.message);
+    }
+
+    const inserted = r1.inserted + targeted.inserted;
+    const updated  = r1.updated  + targeted.updated;
+    console.log(`[DAILY] Step 1 sync: inserted=${inserted} updated=${updated} (targeted: +${targeted.inserted}i +${targeted.updated}u)`);
+    return { ok: true, inserted, updated };
   } catch (err: any) {
     console.error('[DAILY] Step 1 sync error:', err?.message);
     return { ok: false, inserted: 0, updated: 0, error: err?.message };
@@ -67,7 +87,12 @@ async function stepScoreMarkets(domain = 'sports', topN = 5): Promise<{ ok: bool
       })
     );
 
-    const selected    = selectTopMarkets(scored.map(s => s.scored), topN);
+    const itemsWithDomain: ScoredMarketWithDomain[] = scored.map(s => ({
+      scored:   s.scored,
+      domain:   s.domain,
+      marketId: s.market.id,
+    }));
+    const selected    = selectMarketsWithDomainBalance(itemsWithDomain, topN);
     const selectedIds = new Set(selected.map(s => s.marketId));
 
     const rows = scored.map(({ scored: s, market: m, domain: d }) => ({

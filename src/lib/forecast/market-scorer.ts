@@ -119,3 +119,75 @@ export function scoreMarket(m: MarketForScoring, newsCount = 0): ScoredMarket {
 export function selectTopMarkets(scored: ScoredMarket[], topN = 5): ScoredMarket[] {
   return scored.filter(s => s.eligible).sort((a, b) => b.score - a.score).slice(0, topN);
 }
+
+// ── Domain-aware selection (Manus thesis enforcement) ─────────────────────────
+
+/**
+ * Per-domain priority weights for selection.
+ * Sports gets 1 (lowest). All thesis-aligned domains get 5–10.
+ * Used as a tiebreaker AND as a multiplier cap on sports selection.
+ */
+export const DOMAIN_PRIORITY: Record<string, number> = {
+  politics:    10,
+  geopolitics: 10,
+  tech:        8,
+  crypto:      8,
+  macro:       7,
+  culture:     5,
+  other:       4,
+  sports:      1,   // ← thesis says: near-zero LLM edge
+};
+
+/** Max sports markets per selection cycle. Hard cap. */
+export const SPORTS_MAX_PER_CYCLE = 1;
+
+export interface ScoredMarketWithDomain {
+  scored:  ScoredMarket;
+  domain:  string;
+  /** Raw db market_id — same as scored.marketId but explicit for clarity. */
+  marketId: string;
+}
+
+/**
+ * Domain-balanced selection enforcing the Manus thesis:
+ *
+ *   1. Eligible markets are sorted by (domain_priority DESC, score DESC).
+ *   2. Sports is hard-capped at SPORTS_MAX_PER_CYCLE (1) slot per cycle.
+ *      Even if 5 sports markets score highest by raw points, only 1 gets in.
+ *   3. Remaining slots are filled by non-sports in priority × score order.
+ *
+ * This means: if there are any eligible politics/geopolitics/tech/crypto
+ * markets, they ALWAYS win the selection over additional sports markets.
+ *
+ * File: src/lib/forecast/market-scorer.ts
+ * Called from: src/app/api/forecast/daily-cycle/route.ts :: stepScoreMarkets()
+ */
+export function selectMarketsWithDomainBalance(
+  items:     ScoredMarketWithDomain[],
+  topN:      number = 5,
+  sportsCap: number = SPORTS_MAX_PER_CYCLE,
+): ScoredMarket[] {
+  const eligible = items.filter(i => i.scored.eligible);
+
+  // Sort by (domain_priority DESC, score DESC) — non-sports always float up
+  eligible.sort((a, b) => {
+    const pa = DOMAIN_PRIORITY[a.domain] ?? 4;
+    const pb = DOMAIN_PRIORITY[b.domain] ?? 4;
+    if (pb !== pa) return pb - pa;
+    return b.scored.score - a.scored.score;
+  });
+
+  const selected: ScoredMarket[] = [];
+  let sportsCount = 0;
+
+  for (const item of eligible) {
+    if (selected.length >= topN) break;
+    if (item.domain === 'sports') {
+      if (sportsCount >= sportsCap) continue;   // skip; cap already hit
+      sportsCount++;
+    }
+    selected.push(item.scored);
+  }
+
+  return selected;
+}

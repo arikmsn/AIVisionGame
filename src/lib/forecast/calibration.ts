@@ -27,6 +27,7 @@ interface SubmissionRow {
   agent_id:        string;
   probability_yes: number;
   error_text:      string | null;
+  metadata_json:   { prompt_version?: string; role?: string } | null;
 }
 
 interface RoundRow {
@@ -90,18 +91,21 @@ export async function recordCalibrationOnResolve(
 
     const submissions = await faSelect<SubmissionRow>(
       'fa_submissions',
-      `round_id=eq.${roundId}&select=id,round_id,agent_id,probability_yes,error_text`,
+      `round_id=eq.${roundId}&select=id,round_id,agent_id,probability_yes,error_text,metadata_json`,
     );
     if (submissions.length === 0) return { recorded: 0 };
 
+    const resolvedAt = new Date().toISOString();
     const rows = submissions.map(s => {
-      const p = Number(s.probability_yes ?? 0.5);
+      const p             = Number(s.probability_yes ?? 0.5);
+      const promptVersion = s.metadata_json?.prompt_version ?? 'v1';
+      const role          = s.metadata_json?.role ?? null;
       return {
         submission_id:    s.id,
         round_id:         s.round_id,
         market_id:        round.market_id,
         agent_id:         s.agent_id,
-        resolved_at:      new Date().toISOString(),
+        resolved_at:      resolvedAt,
         domain,
         p_model:          p,
         p_market_at_open: pMarket,
@@ -109,6 +113,8 @@ export async function recordCalibrationOnResolve(
         outcome,
         brier:            brierScore(p, outcome),
         log_loss:         logLoss(p, outcome),
+        prompt_version:   promptVersion,
+        role,
       };
     });
 
