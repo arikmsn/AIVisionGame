@@ -19,7 +19,8 @@ import { faInsert, faSelect, faPatch, faUpsert }               from './db';
 import { scoreMarket, selectTopMarkets, detectDomain,
          type MarketForScoring }                               from './market-scorer';
 import { runAllAgentsOnRound }                                 from './runner';
-import { openPosition }                                        from './positions';
+import { openSystemPosition }                                  from './positions';
+import { aggregateVotes, decisionSnapshot, type ModelVote }   from './aggregator';
 
 // ── Config defaults (overridden by fa_experiment_config) ──────────────────────
 
@@ -268,30 +269,49 @@ async function stepRunRoundsIfPriceMoved(cfg: LightCycleConfig): Promise<LightCy
         const results = await runAllAgentsOnRound(roundId);
         await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
 
-        // Open positions for successful submissions
-        const marketPrice = currentPrice;
-        for (const sub of results.filter(r => r.success)) {
-          if (!sub.submissionId || sub.probabilityYes == null) continue;
+        // ── Aggregate all model votes into ONE system decision ────────────────
+        const votes: ModelVote[] = results
+          .filter(r => r.success && r.submissionId && r.probabilityYes != null)
+          .map(r => ({
+            agentSlug:      r.agentSlug,
+            submissionId:   r.submissionId!,
+            probabilityYes: r.probabilityYes!,
+            weight:         1.0,   // equal weights v1; increase for better models
+          }));
+
+        const decision = aggregateVotes(votes, currentPrice, bankrollBalance);
+
+        // Persist system decision into round context_json
+        const existingCtx = (await faSelect<{ context_json: any }>(
+          'fa_rounds', `id=eq.${roundId}&select=context_json`,
+        ).catch(() => [])) [0]?.context_json ?? {};
+
+        await faPatch('fa_rounds', { id: roundId }, {
+          context_json: { ...existingCtx, system_decision: decisionSnapshot(decision) },
+        }).catch(() => {});
+
+        // Open ONE system position if decision warrants it
+        if (decision.action !== 'no_trade' && decision.nomineeSlug) {
           const agentRow = await faSelect<{ id: string }>(
-            'fa_agents', `slug=eq.${sub.agentSlug}&select=id`,
+            'fa_agents', `slug=eq.${decision.nomineeSlug}&select=id`,
           );
-          if (!agentRow[0]) continue;
-
-          const posId = await openPosition({
-            agentId:      agentRow[0].id,
-            agentSlug:    sub.agentSlug,
-            marketId:     mId,
-            roundId,
-            submissionId: sub.submissionId,
-            agentProbYes: sub.probabilityYes,
-            marketPrice,
-            walletBalance: bankrollBalance,
-          }).catch(() => null);
-
-          if (posId) positions++;
+          if (agentRow[0]) {
+            const posId = await openSystemPosition({
+              nomineeAgentId:   agentRow[0].id,
+              nomineeAgentSlug: decision.nomineeSlug,
+              marketId:         mId,
+              roundId,
+              decision,
+            }).catch(() => null);
+            if (posId) positions++;
+          }
         }
 
-        console.log(`[LIGHT] Round ${roundId}: ${results.filter(r => r.success).length} subs, ${positions} total pos`);
+        console.log(
+          `[LIGHT] Round ${roundId}: ${votes.length} votes → ` +
+          `${decision.action} (agg_edge ${(decision.aggregatedEdge * 100).toFixed(1)}%, ` +
+          `σ=${(decision.disagreement * 100).toFixed(1)}%)`,
+        );
       } catch (mktErr: any) {
         console.error(`[LIGHT] Round error for market ${mId}:`, mktErr?.message);
       }

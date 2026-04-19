@@ -9,14 +9,14 @@
  * enforces Basic Auth on all /forecast-arena/* routes).
  */
 
-import { runTickCycle } from '@/lib/forecast/positions';
+import { runTickCycle, openSystemPosition } from '@/lib/forecast/positions';
 import { syncMarketsToDb } from '@/lib/forecast/polymarket';
 import { faInsert, faSelect, faPatch, faUpsert } from '@/lib/forecast/db';
 import { runAllAgentsOnRound } from '@/lib/forecast/runner';
-import { openPosition } from '@/lib/forecast/positions';
 import { scoreMarket, selectTopMarkets, detectDomain, type MarketForScoring } from '@/lib/forecast/market-scorer';
 import { getNewsCountOnly, getOrRefreshContext } from '@/lib/forecast/news-context';
 import { runLightCycle } from '@/lib/forecast/light-cycle';
+import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast/aggregator';
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -259,12 +259,23 @@ export async function runDailyCycleAction(): Promise<ActionResult> {
         await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
         const bankroll = await faSelect<{ available_usd: number }>('fa_central_bankroll', 'select=available_usd&limit=1').catch(() => []);
         const balance = bankroll[0] ? Number(bankroll[0].available_usd) : 60000;
-        for (const sub of results.filter(r => r.success)) {
-          if (!sub.submissionId || sub.probabilityYes == null) continue;
-          const agentRow = await faSelect<{ id: string }>('fa_agents', `slug=eq.${sub.agentSlug}&select=id`);
-          if (!agentRow[0]) continue;
-          const posId = await openPosition({ agentId: agentRow[0].id, agentSlug: sub.agentSlug, marketId: mId, roundId, submissionId: sub.submissionId, agentProbYes: sub.probabilityYes, marketPrice: Number(yesPrice ?? 0), walletBalance: balance }).catch(() => null);
-          if (posId) positionsOpened++;
+        const mktPrice = Number(yesPrice ?? 0);
+
+        const votes: ModelVote[] = results
+          .filter(r => r.success && r.submissionId && r.probabilityYes != null)
+          .map(r => ({ agentSlug: r.agentSlug, submissionId: r.submissionId!, probabilityYes: r.probabilityYes!, weight: 1.0 }));
+
+        const decision = aggregateVotes(votes, mktPrice, balance);
+        await faPatch('fa_rounds', { id: roundId }, {
+          context_json: { created_by: 'daily-cycle', system_decision: decisionSnapshot(decision) },
+        }).catch(() => {});
+
+        if (decision.action !== 'no_trade' && decision.nomineeSlug) {
+          const agentRow = await faSelect<{ id: string }>('fa_agents', `slug=eq.${decision.nomineeSlug}&select=id`);
+          if (agentRow[0]) {
+            const posId = await openSystemPosition({ nomineeAgentId: agentRow[0].id, nomineeAgentSlug: decision.nomineeSlug, marketId: mId, roundId, decision }).catch(() => null);
+            if (posId) positionsOpened++;
+          }
         }
       } catch { /* continue to next market */ }
     }
@@ -339,35 +350,52 @@ export async function runLatestRoundAction(): Promise<ActionResult> {
     const results = await runAllAgentsOnRound(roundId);
     await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
 
-    // Open positions for successful submissions
+    // ── Aggregate all model votes → ONE system decision ───────────────────────
     const succeeded = results.filter(r => r.success);
     let positionsOpened = 0;
 
     if (marketPrice > 0) {
-      // Use central bankroll (shared pool) — not per-agent wallets
       const bankrollRows = await faSelect<{ available_usd: number }>(
         'fa_central_bankroll', 'select=available_usd&limit=1',
       );
       const balance = bankrollRows[0] ? Number(bankrollRows[0].available_usd) : 60000;
 
-      for (const sub of succeeded) {
-        if (!sub.submissionId || sub.probabilityYes == null) continue;
-        const agents = await faSelect<{ id: string }>(
-          'fa_agents', `slug=eq.${sub.agentSlug}&select=id`,
+      const votes: ModelVote[] = succeeded
+        .filter(r => r.submissionId && r.probabilityYes != null)
+        .map(r => ({
+          agentSlug:      r.agentSlug,
+          submissionId:   r.submissionId!,
+          probabilityYes: r.probabilityYes!,
+          weight:         1.0,
+        }));
+
+      const decision = aggregateVotes(votes, marketPrice, balance);
+
+      // Store system decision on the round
+      await faPatch('fa_rounds', { id: roundId }, {
+        context_json: { system_decision: decisionSnapshot(decision) },
+      }).catch(() => {});
+
+      if (decision.action !== 'no_trade' && decision.nomineeSlug) {
+        const agentRow = await faSelect<{ id: string }>(
+          'fa_agents', `slug=eq.${decision.nomineeSlug}&select=id`,
         );
-        if (!agents[0]) continue;
-        const posId = await openPosition({
-          agentId: agents[0].id, agentSlug: sub.agentSlug, marketId: round.market_id,
-          roundId, submissionId: sub.submissionId,
-          agentProbYes: sub.probabilityYes, marketPrice, walletBalance: balance,
-        }).catch(() => null);
-        if (posId) positionsOpened++;
+        if (agentRow[0]) {
+          const posId = await openSystemPosition({
+            nomineeAgentId:   agentRow[0].id,
+            nomineeAgentSlug: decision.nomineeSlug,
+            marketId:         round.market_id,
+            roundId,
+            decision,
+          }).catch(() => null);
+          if (posId) positionsOpened++;
+        }
       }
     }
 
     return {
       ok:      true,
-      message: `Round ran: ${succeeded.length}/${results.length} agents succeeded, ${positionsOpened} positions opened`,
+      message: `Round ran: ${succeeded.length}/${results.length} agents submitted, ${positionsOpened} position${positionsOpened !== 1 ? 's' : ''} opened`,
       detail:  {
         roundId,
         succeeded:       succeeded.length,

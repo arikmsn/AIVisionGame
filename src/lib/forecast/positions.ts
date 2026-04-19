@@ -22,6 +22,7 @@
 
 import { faInsert, faSelect, faPatch, faUpsert } from './db';
 import { fetchMarketById } from './polymarket';
+import type { AggregatedDecision } from './aggregator';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -214,6 +215,119 @@ export async function openPosition(args: OpenPositionArgs): Promise<string | nul
 
   console.log(`[FA/POS] ${agentSlug} opened ${side} $${sizeUsd.toFixed(2)} ` +
     `at ${(entryPrice*100).toFixed(1)}% (edge ${(edge*100).toFixed(1)}%) → pos ${positionId}`);
+
+  return positionId;
+}
+
+// ── System-level position opening ────────────────────────────────────────────
+
+export interface OpenSystemPositionArgs {
+  /** DB id of the nominee agent (used only for fa_positions.agent_id linkage). */
+  nomineeAgentId:   string;
+  /** Slug of the nominee agent (for logging). */
+  nomineeAgentSlug: string;
+  marketId:         string;
+  roundId:          string;
+  /** The aggregated decision produced by aggregator.aggregateVotes(). */
+  decision:         AggregatedDecision;
+}
+
+/**
+ * Open ONE system-level position for a market round.
+ *
+ * Unlike openPosition() (which takes a single model's forecast), this
+ * function receives the already-computed AggregatedDecision.  The position
+ * is tied to the round, not to any individual model submission.
+ *
+ * Returns the created position ID, or null if the decision is no_trade or
+ * the DB insert fails.
+ */
+export async function openSystemPosition(args: OpenSystemPositionArgs): Promise<string | null> {
+  const { nomineeAgentId, nomineeAgentSlug, marketId, roundId, decision } = args;
+
+  if (decision.action === 'no_trade') return null;
+  if (decision.sizeUsd < MIN_POSITION_USD) return null;
+
+  const side: 'long' | 'short' = decision.action === 'open_long' ? 'long' : 'short';
+  const entryPrice  = decision.marketPrice;
+  const sizeUsd     = decision.sizeUsd;
+
+  const contractPrice = side === 'long' ? entryPrice : (1 - entryPrice);
+  if (contractPrice <= 0) return null;
+  const contracts = sizeUsd / contractPrice;
+
+  // submission_id is null — this is a system position, not per-model
+  const rows = await faInsert('fa_positions', [{
+    agent_id:        nomineeAgentId,
+    market_id:       marketId,
+    round_id:        roundId,
+    submission_id:   null,
+    status:          'open',
+    side,
+    size_usd:        sizeUsd,
+    cost_basis_usd:  sizeUsd,
+    contracts,
+    avg_entry_price: entryPrice,
+    open_price:      entryPrice,
+    current_price:   entryPrice,
+    unrealized_pnl:  0,
+    realized_pnl:    0,
+  }], { returning: true });
+
+  if (!Array.isArray(rows) || !rows[0]) return null;
+  const positionId = (rows[0] as any).id as string;
+
+  // Entry transaction
+  await faInsert('fa_transactions', [{
+    agent_id:              nomineeAgentId,
+    submission_id:         null,
+    round_id:              roundId,
+    position_id:           positionId,
+    type:                  'open_position',
+    side:                  side === 'long' ? 'yes' : 'no',
+    market_price_at_entry: entryPrice,
+    paper_size_usd:        sizeUsd,
+    notional_usd:          sizeUsd,
+    outcome:               null,
+    pnl_usd:               null,
+  }]);
+
+  // Deduct from central bankroll
+  const bankrollRows = await faSelect<{ id: string; available_usd: number; allocated_usd: number }>(
+    'fa_central_bankroll', 'select=id,available_usd,allocated_usd&limit=1',
+  );
+  if (bankrollRows.length > 0) {
+    const br = bankrollRows[0];
+    await faPatch('fa_central_bankroll', { id: br.id }, {
+      available_usd: Math.max(0, Number(br.available_usd) - sizeUsd),
+      allocated_usd: Number(br.allocated_usd) + sizeUsd,
+      updated_at:    new Date().toISOString(),
+    });
+  }
+
+  await faInsert('fa_audit_events', [{
+    event_type:   'position_opened',
+    entity_type:  'position',
+    entity_id:    positionId,
+    actor:        'system-brain',
+    payload_json: {
+      side, size_usd: sizeUsd, entry_price: entryPrice,
+      aggregated_edge: decision.aggregatedEdge,
+      aggregated_p:    decision.aggregatedP,
+      disagreement:    decision.disagreement,
+      model_count:     decision.modelCount,
+      nominee_slug:    nomineeAgentSlug,
+      reason:          decision.reason,
+    },
+  }]);
+
+  console.log(
+    `[FA/POS] system-brain opened ${side} $${sizeUsd.toFixed(2)} ` +
+    `at ${(entryPrice * 100).toFixed(1)}% ` +
+    `(agg_edge ${(decision.aggregatedEdge * 100).toFixed(1)}%, ` +
+    `σ=${(decision.disagreement * 100).toFixed(1)}%, ` +
+    `nominee=${nomineeAgentSlug}) → pos ${positionId}`,
+  );
 
   return positionId;
 }

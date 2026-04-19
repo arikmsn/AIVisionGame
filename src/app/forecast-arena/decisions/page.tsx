@@ -2,18 +2,21 @@
  * /forecast-arena/decisions — Decision Journal
  *
  * Every evaluated market: what the system saw, what each model said,
- * what the edge was, and what action was taken — including when no
- * position was opened and why.
+ * and ONE aggregated system decision (long / short / no-trade).
+ *
+ * Layout per round:
+ *   1. Round header  — market name, price at open, timestamp
+ *   2. System Decision banner — aggregated probability, edge, disagreement,
+ *      vote counts, final action, position size, reasoning
+ *   3. Model assessment table — per-model estimate, individual edge, signal,
+ *      rationale (expert-witness view; no per-model position any more)
  */
 
 import Link from 'next/link';
 import { sfetch } from '@/lib/forecast/db';
+import { AGG_MIN_EDGE } from '@/lib/forecast/aggregator';
 
 export const dynamic = 'force-dynamic';
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const MIN_EDGE = 0.10; // must match positions.ts
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -28,7 +31,21 @@ function relTime(iso: string): string {
   return `${d}d ago`;
 }
 
+function pct(n: number, dp = 1) { return `${(n * 100).toFixed(dp)}%`; }
 function pnlColor(n: number) { return n > 0 ? '#4ade80' : n < 0 ? '#f87171' : '#9ca3af'; }
+function edgeColor(n: number) { return Math.abs(n) >= AGG_MIN_EDGE ? pnlColor(n) : '#555'; }
+
+function disagreementColor(d: number) {
+  if (d < 0.05)  return '#4ade80';   // strong consensus
+  if (d < 0.12)  return '#fbbf24';   // moderate
+  return '#f87171';                   // high disagreement
+}
+
+function disagreementLabel(d: number) {
+  if (d < 0.05)  return 'Consensus';
+  if (d < 0.12)  return 'Moderate';
+  return 'Disputed';
+}
 
 const ACTION_LABELS: Record<string, { label: string; color: string }> = {
   strong_yes: { label: 'Strong Yes', color: '#4ade80' },
@@ -39,12 +56,155 @@ const ACTION_LABELS: Record<string, { label: string; color: string }> = {
 };
 
 const TH: React.CSSProperties = {
-  padding: '6px 10px', textAlign: 'left', color: '#3a3a3a',
+  padding: '6px 10px', textAlign: 'left', color: '#333',
   fontWeight: 500, fontSize: '0.58rem', letterSpacing: '0.06em',
   textTransform: 'uppercase', borderBottom: '1px solid #1a1a1a',
   whiteSpace: 'nowrap', background: '#090909',
 };
 const TD: React.CSSProperties = { padding: '8px 10px', verticalAlign: 'middle' };
+
+// ── System Decision Banner ────────────────────────────────────────────────────
+
+function SystemDecisionBanner({
+  sysDecision,
+  marketPrice,
+  systemPos,
+}: {
+  sysDecision:   Record<string, any>;
+  marketPrice:   number;
+  systemPos:     any | null;   // fa_positions row if a position was opened
+}) {
+  const action: string  = sysDecision.action ?? 'no_trade';
+  const aggP    = Number(sysDecision.aggregated_p    ?? marketPrice);
+  const aggEdge = Number(sysDecision.aggregated_edge ?? 0);
+  const sigma   = Number(sysDecision.disagreement    ?? 0);
+  const sizeUsd = Number(sysDecision.size_usd        ?? 0);
+  const longV   = Number(sysDecision.long_votes      ?? 0);
+  const shortV  = Number(sysDecision.short_votes     ?? 0);
+  const models  = Number(sysDecision.model_count     ?? longV + shortV);
+
+  const actionColor =
+    action === 'open_long'  ? '#4ade80' :
+    action === 'open_short' ? '#f87171' : '#555';
+  const actionLabel =
+    action === 'open_long'  ? '▲ OPEN LONG' :
+    action === 'open_short' ? '▼ OPEN SHORT' : '— NO TRADE';
+  const actionBg =
+    action === 'open_long'  ? '#071207' :
+    action === 'open_short' ? '#120707' : '#0d0d0d';
+
+  // P&L for the opened position (if any)
+  let posInfo: React.ReactNode = null;
+  if (systemPos) {
+    const pnl = Number(systemPos.realized_pnl || 0) +
+      (systemPos.status === 'open' ? Number(systemPos.unrealized_pnl || 0) : 0);
+    posInfo = (
+      <span style={{ fontSize: '0.65rem', color: pnlColor(pnl), marginLeft: '10px' }}>
+        ${Number(systemPos.cost_basis_usd).toFixed(0)} · {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} P&L
+        {systemPos.status === 'closed' && <span style={{ color: '#555' }}> (closed)</span>}
+      </span>
+    );
+  }
+
+  return (
+    <div style={{
+      margin: '0', padding: '12px 16px',
+      background: actionBg,
+      borderBottom: '1px solid #1a1a1a',
+      display: 'flex', gap: '20px', alignItems: 'flex-start', flexWrap: 'wrap',
+    }}>
+      {/* Action badge */}
+      <div style={{ minWidth: '110px' }}>
+        <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>
+          System Decision
+        </div>
+        <div style={{
+          fontFamily: 'monospace', fontWeight: 700,
+          fontSize: '0.82rem', color: actionColor,
+          letterSpacing: '0.02em',
+        }}>
+          {actionLabel}
+        </div>
+        {posInfo}
+      </div>
+
+      {/* Aggregated probability */}
+      <div>
+        <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Aggregated P</div>
+        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.88rem', color: edgeColor(aggEdge) }}>
+          {pct(aggP)}
+        </span>
+        <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>
+          mkt {pct(marketPrice)}
+        </span>
+      </div>
+
+      {/* Aggregated edge */}
+      <div>
+        <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Agg Edge</div>
+        <span style={{
+          fontFamily: 'monospace', fontWeight: 700,
+          fontSize: '0.88rem', color: edgeColor(aggEdge),
+        }}>
+          {aggEdge >= 0 ? '+' : ''}{pct(aggEdge)}
+        </span>
+        {Math.abs(aggEdge) >= AGG_MIN_EDGE && (
+          <span style={{ fontSize: '0.55rem', color: '#4ade8055', marginLeft: '5px' }}>✓</span>
+        )}
+      </div>
+
+      {/* Disagreement */}
+      <div>
+        <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Disagreement σ</div>
+        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.85rem', color: disagreementColor(sigma) }}>
+          {pct(sigma)}
+        </span>
+        <span style={{ fontSize: '0.58rem', color: '#444', marginLeft: '6px' }}>
+          {disagreementLabel(sigma)}
+        </span>
+      </div>
+
+      {/* Vote counts */}
+      <div>
+        <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>
+          Votes ({models} models)
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.7rem', fontFamily: 'monospace' }}>
+            <span style={{ color: '#4ade80' }}>▲{longV}</span>
+            <span style={{ color: '#333', margin: '0 3px' }}>/</span>
+            <span style={{ color: '#f87171' }}>▼{shortV}</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Size */}
+      {action !== 'no_trade' && sizeUsd > 0 && (
+        <div>
+          <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Position Size</div>
+          <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '0.82rem', color: '#d4d4d4' }}>
+            ${sizeUsd.toFixed(0)}
+          </span>
+          {sysDecision.size_pct != null && (
+            <span style={{ fontSize: '0.58rem', color: '#555', marginLeft: '5px' }}>
+              ({pct(Number(sysDecision.size_pct), 2)} of bankroll)
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Reason */}
+      {sysDecision.reason && (
+        <div style={{ flex: 1, minWidth: '200px' }}>
+          <div style={{ fontSize: '0.52rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Reasoning</div>
+          <div style={{ fontSize: '0.65rem', color: '#555', lineHeight: 1.5 }}>
+            {sysDecision.reason}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -62,14 +222,14 @@ export default async function DecisionsPage({
   let submissions: any[] = [];
   let agents:      any[] = [];
   let positions:   any[] = [];
+  let roundContexts: any[] = [];
   let totalCount   = 0;
 
   try {
-    // Count using fa_rounds directly (reliable)
-    const countRes = await sfetch('fa_rounds?select=id').then((r: any) => Array.isArray(r) ? r : []).catch(() => []);
+    const countRes = await sfetch('fa_rounds?select=id')
+      .then((r: any) => Array.isArray(r) ? r : []).catch(() => []);
     totalCount = countRes.length;
 
-    // Fetch round summaries — note: column is `category` not `market_category`
     [rounds, agents] = await Promise.all([
       sfetch(
         `fa_v_round_summary?select=round_id,round_number,market_id,market_title,category,market_yes_price_at_open,current_yes_price,round_status,opened_at,resolved_at` +
@@ -81,23 +241,41 @@ export default async function DecisionsPage({
 
     if (rounds.length > 0) {
       const roundIds = rounds.map((r: any) => r.round_id).join(',');
-      [submissions, positions] = await Promise.all([
+      [submissions, positions, roundContexts] = await Promise.all([
         sfetch(`fa_submissions?round_id=in.(${roundIds})&select=*&order=submitted_at.asc`)
           .then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
-        sfetch(`fa_positions?round_id=in.(${roundIds})&select=id,agent_id,submission_id,side,cost_basis_usd,realized_pnl,unrealized_pnl,status,avg_entry_price`)
+        // Fetch all positions for these rounds (system positions have submission_id=null)
+        sfetch(`fa_positions?round_id=in.(${roundIds})&select=id,agent_id,submission_id,round_id,side,cost_basis_usd,realized_pnl,unrealized_pnl,status,avg_entry_price`)
+          .then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+        // Fetch context_json for system decision data
+        sfetch(`fa_rounds?id=in.(${roundIds})&select=id,context_json`)
           .then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       ]);
     }
   } catch { /* ok */ }
 
-  const agentMap        = new Map(agents.map((a: any) => [a.id, a]));
-  const subsByRound     = new Map<string, any[]>();
+  const agentMap         = new Map(agents.map((a: any) => [a.id, a]));
+  const subsByRound      = new Map<string, any[]>();
   for (const s of submissions) {
     if (!subsByRound.has(s.round_id)) subsByRound.set(s.round_id, []);
     subsByRound.get(s.round_id)!.push(s);
   }
-  const possBySubmission = new Map(positions.map((p: any) => [p.submission_id, p]));
-  const totalPages       = Math.ceil(totalCount / pageSize);
+
+  // System position per round (submission_id = null)
+  const systemPosByRound = new Map<string, any>();
+  for (const p of positions) {
+    if (!p.submission_id && p.round_id) {
+      systemPosByRound.set(p.round_id, p);
+    }
+  }
+
+  // context_json per round (for system_decision)
+  const ctxByRound = new Map<string, any>();
+  for (const r of roundContexts) {
+    ctxByRound.set(r.id, r.context_json ?? null);
+  }
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -110,12 +288,11 @@ export default async function DecisionsPage({
           Decision Journal
         </h1>
         <p style={{ color: '#444', fontSize: '0.72rem', margin: 0 }}>
-          Every market the system evaluated — model estimates, computed edges, and position outcomes.
-          {' '}Shows both entries taken and passes with reasons.
+          Every market evaluated by the system. Models are expert advisors — the system trades as one brain,
+          opening at most one position per market per round based on the aggregated model view.
         </p>
       </div>
 
-      {/* ── Empty state when rounds genuinely don't exist ── */}
       {totalCount === 0 && (
         <div style={{
           padding: '48px 32px', textAlign: 'center',
@@ -126,9 +303,9 @@ export default async function DecisionsPage({
             No evaluations yet
           </div>
           <div style={{ color: '#3a3a3a', fontSize: '0.75rem', lineHeight: 1.7, maxWidth: '420px', margin: '0 auto' }}>
-            When the system runs a round — via the daily cycle, light cycle, or manually — it evaluates
-            selected markets with all active models. Each model's probability estimate, edge, and decision
-            will appear here, along with whether a position was opened and why.
+            When the system runs a round it evaluates selected markets with all active models.
+            Each model's estimate is aggregated into one system decision (long / short / no-trade),
+            which appears here alongside the per-model expert views.
           </div>
           <div style={{ marginTop: '20px' }}>
             <Link href="/forecast-arena/dashboard" style={{
@@ -141,7 +318,6 @@ export default async function DecisionsPage({
         </div>
       )}
 
-      {/* ── Rounds exist but this page's sfetch failed (schema mismatch etc.) ── */}
       {totalCount > 0 && rounds.length === 0 && (
         <div style={{
           padding: '24px', background: '#110a0a', border: '1px solid #2a1a1a',
@@ -151,8 +327,7 @@ export default async function DecisionsPage({
             Unable to load decision entries
           </div>
           <div style={{ color: '#555', fontSize: '0.72rem' }}>
-            {totalCount} evaluation round{totalCount !== 1 ? 's' : ''} exist in the database,
-            but the summary view returned no data. This usually resolves on refresh.
+            {totalCount} round{totalCount !== 1 ? 's' : ''} exist but the summary view returned no data.
           </div>
         </div>
       )}
@@ -161,20 +336,32 @@ export default async function DecisionsPage({
       {rounds.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           {rounds.map((round: any) => {
-            const subs            = subsByRound.get(round.round_id) ?? [];
-            const marketPrice     = Number(round.market_yes_price_at_open ?? 0);
-            const posCount        = subs.filter((s: any) => possBySubmission.has(s.id)).length;
-            const passCount       = subs.filter((s: any) => !possBySubmission.has(s.id) && !s.error_text).length;
-            const errorCount      = subs.filter((s: any) => !!s.error_text).length;
-            const ageH            = round.opened_at
+            const subs        = subsByRound.get(round.round_id) ?? [];
+            const marketPrice = Number(round.market_yes_price_at_open ?? 0);
+            const errorCount  = subs.filter((s: any) => !!s.error_text).length;
+            const ageH        = round.opened_at
               ? (Date.now() - new Date(round.opened_at).getTime()) / 3_600_000 : 0;
-            const isRecent        = ageH < 4;
-            const roundDate       = round.opened_at
+            const isRecent    = ageH < 4;
+            const roundDate   = round.opened_at
               ? new Date(round.opened_at).toLocaleString('en-US', {
                   month: 'short', day: 'numeric',
                   hour: '2-digit', minute: '2-digit',
                 })
               : '--';
+
+            const ctx        = ctxByRound.get(round.round_id) ?? null;
+            const sysDecision: Record<string, any> | null = ctx?.system_decision ?? null;
+            const systemPos  = systemPosByRound.get(round.round_id) ?? null;
+
+            // Legacy compatibility: old rounds had per-agent positions linked by submission_id
+            const possBySubmission = new Map(
+              positions
+                .filter((p: any) => p.submission_id && p.round_id === round.round_id)
+                .map((p: any) => [p.submission_id, p]),
+            );
+
+            const actionStr = sysDecision?.action ?? null;
+            const hasPosition = !!systemPos;
 
             return (
               <div key={round.round_id} style={{
@@ -190,7 +377,6 @@ export default async function DecisionsPage({
                   borderBottom: '1px solid #161616',
                   display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap',
                 }}>
-                  {/* Round number + time */}
                   <div style={{ minWidth: '52px' }}>
                     <div style={{ fontSize: '0.55rem', color: '#333', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Round</div>
                     <div style={{ fontFamily: 'monospace', color: '#555', fontWeight: 700 }}>
@@ -198,7 +384,6 @@ export default async function DecisionsPage({
                     </div>
                   </div>
 
-                  {/* Market */}
                   <div style={{ flex: 1, minWidth: '200px' }}>
                     <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#d4d4d4', lineHeight: 1.3 }}>
                       {round.market_title}
@@ -210,29 +395,39 @@ export default async function DecisionsPage({
                           {marketPrice > 0 ? `${(marketPrice * 100).toFixed(1)}%` : '--'}
                         </strong>
                       </span>
-                      {round.category && (
-                        <span style={{ color: '#333' }}>{round.category}</span>
-                      )}
+                      {round.category && <span style={{ color: '#333' }}>{round.category}</span>}
                       <span title={round.opened_at}>{relTime(round.opened_at)} · {roundDate}</span>
                     </div>
                   </div>
 
-                  {/* Outcome summary */}
+                  {/* Outcome badges */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {posCount > 0 && (
+                    {hasPosition && (
                       <span style={{
                         fontSize: '0.62rem', fontWeight: 600, padding: '2px 8px', borderRadius: '3px',
-                        background: '#122012', color: '#4ade80', border: '1px solid #1e3a1e',
+                        background: systemPos.side === 'long' ? '#122012' : '#201212',
+                        color:      systemPos.side === 'long' ? '#4ade80' : '#f87171',
+                        border: `1px solid ${systemPos.side === 'long' ? '#1e3a1e' : '#3a1e1e'}`,
                       }}>
-                        {posCount} position{posCount !== 1 ? 's' : ''} opened
+                        {systemPos.side === 'long' ? '▲ Long' : '▼ Short'} opened
                       </span>
                     )}
-                    {passCount > 0 && (
+                    {!hasPosition && actionStr === 'no_trade' && (
                       <span style={{
                         fontSize: '0.62rem', padding: '2px 8px', borderRadius: '3px',
                         background: '#111', color: '#555', border: '1px solid #1a1a1a',
                       }}>
-                        {passCount} pass{passCount !== 1 ? 'es' : ''}
+                        No trade
+                      </span>
+                    )}
+                    {!sysDecision && subs.length > 0 && (
+                      <span style={{
+                        fontSize: '0.62rem', padding: '2px 8px', borderRadius: '3px',
+                        background: '#111', color: '#555', border: '1px solid #1a1a1a',
+                      }}>
+                        {subs.filter((s: any) => possBySubmission.has(s.id)).length > 0
+                          ? `${subs.filter((s: any) => possBySubmission.has(s.id)).length} legacy pos`
+                          : `${subs.length} submissions`}
                       </span>
                     )}
                     {errorCount > 0 && (
@@ -243,9 +438,6 @@ export default async function DecisionsPage({
                         {errorCount} error{errorCount !== 1 ? 's' : ''}
                       </span>
                     )}
-                    {subs.length === 0 && (
-                      <span style={{ fontSize: '0.62rem', color: '#333' }}>no submissions</span>
-                    )}
                     <span style={{
                       fontSize: '0.58rem', padding: '2px 7px', borderRadius: '3px',
                       background: '#111', color: '#444', border: '1px solid #1a1a1a',
@@ -255,7 +447,16 @@ export default async function DecisionsPage({
                   </div>
                 </div>
 
-                {/* ── No submissions yet ── */}
+                {/* ── System Decision Banner (new rounds only) ── */}
+                {sysDecision && (
+                  <SystemDecisionBanner
+                    sysDecision={sysDecision}
+                    marketPrice={marketPrice}
+                    systemPos={systemPos}
+                  />
+                )}
+
+                {/* ── No submissions ── */}
                 {subs.length === 0 && (
                   <div style={{ padding: '14px 16px', color: '#333', fontSize: '0.73rem' }}>
                     No model submissions recorded for this round.
@@ -270,40 +471,51 @@ export default async function DecisionsPage({
                         <tr>
                           <th style={TH}>Model</th>
                           <th style={{ ...TH, textAlign: 'right' }}>Estimate</th>
-                          <th style={{ ...TH, textAlign: 'right' }}>Edge</th>
+                          <th style={{ ...TH, textAlign: 'right' }}>Indiv. Edge</th>
                           <th style={TH}>Signal</th>
-                          <th style={TH}>Outcome</th>
-                          <th style={TH}>Reason / Rationale</th>
+                          <th style={TH}>
+                            {sysDecision ? 'Model Vote' : 'Outcome'}
+                          </th>
+                          <th style={TH}>Rationale</th>
                         </tr>
                       </thead>
                       <tbody>
                         {subs.map((sub: any) => {
                           const agent    = agentMap.get(sub.agent_id);
-                          const pos      = possBySubmission.get(sub.id);
                           const prob     = Number(sub.probability_yes ?? 0);
                           const edge     = prob - marketPrice;
                           const absEdge  = Math.abs(edge);
-                          const hasPos   = !!pos;
                           const hasError = !!sub.error_text;
                           const actionInfo = ACTION_LABELS[sub.action] ?? { label: sub.action ?? '--', color: '#555' };
 
-                          // Compute why position was/wasn't opened
-                          let outcomeText = '';
-                          let outcomeColor = '#333';
+                          // Outcome column — different for new vs legacy rounds
+                          let outcomeText  = '';
+                          let outcomeColor = '#555';
+
                           if (hasError) {
-                            outcomeText = `Error: ${sub.error_text?.slice(0, 60)}`;
+                            outcomeText  = `Error: ${sub.error_text?.slice(0, 60)}`;
                             outcomeColor = '#7a2a2a';
-                          } else if (hasPos) {
-                            const side = pos.side === 'long' ? '▲ LONG' : '▼ SHORT';
-                            const pnl  = Number(pos.realized_pnl || 0) + (pos.status === 'open' ? Number(pos.unrealized_pnl || 0) : 0);
-                            outcomeText = `${side} · $${Number(pos.cost_basis_usd).toFixed(0)} · ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} P&L`;
-                            outcomeColor = pos.side === 'long' ? '#4ade80' : '#f87171';
-                          } else if (absEdge < MIN_EDGE) {
-                            outcomeText = `Pass — edge ${(absEdge * 100).toFixed(1)}% < ${MIN_EDGE * 100}% threshold`;
-                            outcomeColor = '#444';
+                          } else if (sysDecision) {
+                            // New aggregated-brain round — show model's directional vote
+                            const direction = edge > 0 ? '▲ Bullish' : edge < 0 ? '▼ Bearish' : '= Neutral';
+                            const dirColor  = edge > 0 ? '#4ade8088' : edge < 0 ? '#f8717188' : '#55555588';
+                            outcomeText  = direction;
+                            outcomeColor = dirColor;
                           } else {
-                            outcomeText = `Pass — edge sufficient but no position opened`;
-                            outcomeColor = '#444';
+                            // Legacy per-agent round — show position if opened
+                            const pos = possBySubmission.get(sub.id);
+                            if (pos) {
+                              const side = pos.side === 'long' ? '▲ LONG' : '▼ SHORT';
+                              const pnl  = Number(pos.realized_pnl || 0) + (pos.status === 'open' ? Number(pos.unrealized_pnl || 0) : 0);
+                              outcomeText  = `${side} · $${Number(pos.cost_basis_usd).toFixed(0)} · ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+                              outcomeColor = pos.side === 'long' ? '#4ade80' : '#f87171';
+                            } else if (absEdge < AGG_MIN_EDGE) {
+                              outcomeText  = `Pass — edge ${(absEdge * 100).toFixed(1)}% < ${AGG_MIN_EDGE * 100}%`;
+                              outcomeColor = '#333';
+                            } else {
+                              outcomeText  = 'Pass — edge sufficient but no position';
+                              outcomeColor = '#444';
+                            }
                           }
 
                           const rationale = hasError
@@ -314,9 +526,6 @@ export default async function DecisionsPage({
                             <tr key={sub.id} style={{
                               borderBottom: '1px solid #111',
                               opacity: hasError ? 0.55 : 1,
-                              background: hasPos
-                                ? (pos.side === 'long' ? '#0b120b' : '#120b0b')
-                                : 'transparent',
                             }}>
                               {/* Model */}
                               <td style={{ ...TD, fontWeight: 600, whiteSpace: 'nowrap' }}>
@@ -343,25 +552,16 @@ export default async function DecisionsPage({
                                 </div>
                               </td>
 
-                              {/* Edge */}
+                              {/* Individual edge */}
                               <td style={{ ...TD, textAlign: 'right', fontFamily: 'monospace' }}>
-                                <span style={{
-                                  fontSize: '0.82rem', fontWeight: 600,
-                                  color: pnlColor(edge),
-                                }}>
+                                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: edgeColor(edge) }}>
                                   {edge >= 0 ? '+' : ''}{(edge * 100).toFixed(1)}%
                                 </span>
-                                {absEdge >= MIN_EDGE && (
-                                  <div style={{ fontSize: '0.55rem', color: '#4ade8055' }}>✓ threshold</div>
-                                )}
                               </td>
 
                               {/* Signal */}
                               <td style={TD}>
-                                <span style={{
-                                  fontSize: '0.65rem', fontWeight: 600,
-                                  color: actionInfo.color,
-                                }}>
+                                <span style={{ fontSize: '0.65rem', fontWeight: 600, color: actionInfo.color }}>
                                   {actionInfo.label}
                                 </span>
                                 {sub.confidence != null && (
@@ -371,8 +571,8 @@ export default async function DecisionsPage({
                                 )}
                               </td>
 
-                              {/* Outcome */}
-                              <td style={{ ...TD, maxWidth: '200px' }}>
+                              {/* Vote / Outcome */}
+                              <td style={{ ...TD, maxWidth: '160px' }}>
                                 <span style={{ fontSize: '0.68rem', color: outcomeColor, lineHeight: 1.4 }}>
                                   {outcomeText}
                                 </span>
@@ -380,8 +580,7 @@ export default async function DecisionsPage({
 
                               {/* Rationale */}
                               <td style={{
-                                ...TD,
-                                fontSize: '0.65rem', color: '#3d3d3d',
+                                ...TD, fontSize: '0.65rem', color: '#3d3d3d',
                                 maxWidth: '240px', lineHeight: 1.5,
                               }}>
                                 {rationale}

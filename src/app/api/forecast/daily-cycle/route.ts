@@ -19,7 +19,8 @@ import { faInsert, faSelect, faUpsert }   from '@/lib/forecast/db';
 import { scoreMarket, selectTopMarkets, detectDomain, type MarketForScoring } from '@/lib/forecast/market-scorer';
 import { getNewsCountOnly, getOrRefreshContext, getActiveProvider } from '@/lib/forecast/news-context';
 import { runAllAgentsOnRound }            from '@/lib/forecast/runner';
-import { openPosition, shouldOpenPosition, runTickCycle } from '@/lib/forecast/positions';
+import { openSystemPosition, runTickCycle } from '@/lib/forecast/positions';
+import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast/aggregator';
 
 export const maxDuration = 300; // 5 min — full cycle can be slow
 
@@ -196,31 +197,39 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
         const results = await runAllAgentsOnRound(roundId);
         await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
 
-        // Open positions for successful submissions
+        // ── Aggregate model votes → ONE system decision ───────────────────────
         const marketPrice = yesPrice != null ? Number(yesPrice) : 0;
-        const agents = await faSelect<{ id: string }>(
-          'fa_agents', 'is_active=eq.true&select=id,slug',
-        ).catch(() => []);
 
-        for (const sub of results.filter(r => r.success)) {
-          if (!sub.submissionId || sub.probabilityYes == null) continue;
+        const votes: ModelVote[] = results
+          .filter(r => r.success && r.submissionId && r.probabilityYes != null)
+          .map(r => ({
+            agentSlug:      r.agentSlug,
+            submissionId:   r.submissionId!,
+            probabilityYes: r.probabilityYes!,
+            weight:         1.0,
+          }));
+
+        const decision = aggregateVotes(votes, marketPrice, bankrollBalance);
+
+        const { faPatch: fp } = await import('@/lib/forecast/db');
+        await fp('fa_rounds', { id: roundId }, {
+          context_json: { created_by: 'daily-cycle', system_decision: decisionSnapshot(decision) },
+        }).catch(() => {});
+
+        if (decision.action !== 'no_trade' && decision.nomineeSlug) {
           const agentRow = await faSelect<{ id: string }>(
-            'fa_agents', `slug=eq.${sub.agentSlug}&select=id`,
+            'fa_agents', `slug=eq.${decision.nomineeSlug}&select=id`,
           );
-          if (!agentRow[0]) continue;
-
-          const positionId = await openPosition({
-            agentId:      agentRow[0].id,
-            agentSlug:    sub.agentSlug,
-            marketId:     mId,
-            roundId,
-            submissionId: sub.submissionId,
-            agentProbYes: sub.probabilityYes,
-            marketPrice,
-            walletBalance: bankrollBalance,
-          }).catch(() => null);
-
-          if (positionId) totalPositions++;
+          if (agentRow[0]) {
+            const positionId = await openSystemPosition({
+              nomineeAgentId:   agentRow[0].id,
+              nomineeAgentSlug: decision.nomineeSlug,
+              marketId:         mId,
+              roundId,
+              decision,
+            }).catch(() => null);
+            if (positionId) totalPositions++;
+          }
         }
 
         console.log(`[DAILY] Round for market ${mId}: ${results.filter(r => r.success).length} subs, ${totalPositions} pos`);

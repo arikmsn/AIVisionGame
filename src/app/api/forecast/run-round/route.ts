@@ -10,7 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runAllAgentsOnRound } from '@/lib/forecast/runner';
 import { faPatch, faSelect } from '@/lib/forecast/db';
-import { openPosition, shouldOpenPosition } from '@/lib/forecast/positions';
+import { openSystemPosition } from '@/lib/forecast/positions';
+import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast/aggregator';
 
 export const maxDuration = 120;
 
@@ -47,69 +48,52 @@ export async function POST(request: NextRequest) {
     const marketId   = rounds[0]?.market_id;
     const marketPrice = Number(rounds[0]?.market_yes_price_at_open ?? 0);
 
-    const positionResults: Array<{
-      agent:             string;
-      positionId:        string | null;
-      side?:             string;
-      edge?:             number;
-      noPositionReason?: string;
-    }> = [];
-
-    // Load central bankroll balance once — shared across all agents
+    // ── Aggregate all model votes → ONE system decision ───────────────────────
     const bankrollRows = await faSelect<{ available_usd: number }>(
       'fa_central_bankroll', 'select=available_usd&limit=1',
     ).catch(() => []);
     const centralBalance = bankrollRows[0] ? Number(bankrollRows[0].available_usd) : 60000;
 
+    let systemPositionId: string | null = null;
+    let systemDecision: ReturnType<typeof aggregateVotes> | null = null;
+
     if (marketId && marketPrice > 0) {
-      for (const sub of succeeded) {
-        if (!sub.submissionId || sub.probabilityYes == null) continue;
+      const votes: ModelVote[] = succeeded
+        .filter(r => r.submissionId && r.probabilityYes != null)
+        .map(r => ({
+          agentSlug:      r.agentSlug,
+          submissionId:   r.submissionId!,
+          probabilityYes: r.probabilityYes!,
+          weight:         1.0,
+        }));
 
-        // Load agent DB row
-        const agents = await faSelect<{ id: string }>(
-          'fa_agents', `slug=eq.${sub.agentSlug}&select=id`,
+      systemDecision = aggregateVotes(votes, marketPrice, centralBalance);
+
+      // Persist into round context_json
+      await faPatch('fa_rounds', { id: roundId }, {
+        context_json: { system_decision: decisionSnapshot(systemDecision) },
+      }).catch(() => {});
+
+      if (systemDecision.action !== 'no_trade' && systemDecision.nomineeSlug) {
+        const agentRow = await faSelect<{ id: string }>(
+          'fa_agents', `slug=eq.${systemDecision.nomineeSlug}&select=id`,
         );
-        if (!agents[0]) continue;
-        const agentId = agents[0].id;
-
-        const walletBalance = centralBalance; // shared pool
-
-        // Determine why a position was or wasn't opened (for UI transparency)
-        const openArgs = {
-          agentId,
-          agentSlug:    sub.agentSlug,
-          marketId,
-          roundId,
-          submissionId: sub.submissionId,
-          agentProbYes: sub.probabilityYes,
-          marketPrice,
-          walletBalance,
-        };
-        const decision = shouldOpenPosition(openArgs);
-        let noPositionReason: string | undefined;
-        if (!decision) {
-          const edge = Math.abs(sub.probabilityYes - marketPrice);
-          noPositionReason = `edge ${(edge*100).toFixed(1)}% < 10% threshold`;
+        if (agentRow[0]) {
+          systemPositionId = await openSystemPosition({
+            nomineeAgentId:   agentRow[0].id,
+            nomineeAgentSlug: systemDecision.nomineeSlug,
+            marketId,
+            roundId,
+            decision: systemDecision,
+          }).catch((err) => {
+            console.error('[RUN-ROUND] openSystemPosition error:', err?.message);
+            return null;
+          });
         }
-
-        const positionId = decision
-          ? await openPosition(openArgs).catch((err) => {
-              console.error(`[RUN-ROUND] openPosition error for ${sub.agentSlug}:`, err?.message);
-              return null;
-            })
-          : null;
-
-        positionResults.push({
-          agent:           sub.agentSlug,
-          positionId,
-          side:            decision?.side,
-          edge:            decision ? Math.abs(sub.probabilityYes - marketPrice) : undefined,
-          noPositionReason,
-        });
       }
     }
 
-    const positionsOpened = positionResults.filter(p => p.positionId !== null).length;
+    const positionsOpened = systemPositionId ? 1 : 0;
 
     return NextResponse.json({
       ok: true,
@@ -118,6 +102,16 @@ export async function POST(request: NextRequest) {
       succeeded:        succeeded.length,
       failed:           failed.length,
       positions_opened: positionsOpened,
+      system_decision: systemDecision ? {
+        action:           systemDecision.action,
+        aggregated_p:     systemDecision.aggregatedP,
+        aggregated_edge:  systemDecision.aggregatedEdge,
+        disagreement:     systemDecision.disagreement,
+        long_votes:       systemDecision.longVotes,
+        short_votes:      systemDecision.shortVotes,
+        size_usd:         systemDecision.sizeUsd,
+        reason:           systemDecision.reason,
+      } : null,
       submissions: succeeded.map(r => ({
         agent:          r.agentSlug,
         probabilityYes: r.probabilityYes,
@@ -126,7 +120,6 @@ export async function POST(request: NextRequest) {
         latencyMs:      r.latencyMs,
         costUsd:        r.costUsd,
       })),
-      positions: positionResults,
       errors: failed.map(r => ({ agent: r.agentSlug, error: r.error })),
     });
   } catch (err: any) {
