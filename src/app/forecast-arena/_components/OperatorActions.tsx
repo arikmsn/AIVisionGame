@@ -21,6 +21,7 @@ import {
   scoreMarketsAction,
   refreshContextAction,
   runDailyCycleAction,
+  runLightCycleAction,
   type ActionResult,
 } from '../dashboard/actions';
 
@@ -114,6 +115,13 @@ export default function OperatorActions() {
       note:   'Update news from NewsAPI for selected markets',
       color:  '#34d399',
       action: refreshContextAction,
+    },
+    {
+      id:     'light',
+      label:  'Run Light Cycle',
+      note:   'Sync → score (cached news) → rounds if price moved',
+      color:  '#38bdf8',
+      action: runLightCycleAction,
     },
     {
       id:     'daily',

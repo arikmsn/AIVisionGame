@@ -8,32 +8,57 @@
  *
  * Called two ways:
  *   GET  — by Vercel Cron (Authorization: Bearer $CRON_SECRET)
+ *           Schedule: every 15 minutes (*/15 * * * *)
  *   POST — manually by admin (x-admin-password: $ADMIN_PASSWORD)
  *
- * Vercel Cron schedule: see vercel.json
+ * After each run an audit event (event_type='tick_cycle') is written to
+ * fa_audit_events so the dashboard System Status card can show last tick time.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { runTickCycle } from '@/lib/forecast/positions';
+import { runTickCycle }              from '@/lib/forecast/positions';
+import { faInsert }                  from '@/lib/forecast/db';
 
 export const maxDuration = 300; // 5 min — ticks can be slow if many positions
 
 // ── Auth helpers ──────────────────────────────────────────────────────────────
 
 function authorizeCron(req: NextRequest): boolean {
-  // Vercel Cron injects Authorization: Bearer <CRON_SECRET>
   const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    // If no CRON_SECRET is set, block cron calls
-    return false;
-  }
-  const auth = req.headers.get('authorization');
-  return auth === `Bearer ${cronSecret}`;
+  if (!cronSecret) return false;
+  return req.headers.get('authorization') === `Bearer ${cronSecret}`;
 }
 
 function authorizeAdmin(req: NextRequest): boolean {
-  const password = req.headers.get('x-admin-password');
-  return !!process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD;
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) return false;
+  return req.headers.get('x-admin-password') === password;
+}
+
+// ── Shared tick runner ────────────────────────────────────────────────────────
+
+async function executeTick(trigger: 'cron' | 'manual') {
+  const result = await runTickCycle();
+
+  // Summarise action counts for the audit payload
+  const actionSummary = result.results.reduce<Record<string, number>>((acc, r) => {
+    acc[r.action] = (acc[r.action] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  // Write audit event so the dashboard can track last-tick time
+  await faInsert('fa_audit_events', [{
+    event_type:   'tick_cycle',
+    entity_type:  'system',
+    actor:        trigger,
+    payload_json: {
+      processed: result.processed,
+      errors:    result.errors.length,
+      actions:   actionSummary,
+    },
+  }]).catch(() => { /* non-fatal */ });
+
+  return result;
 }
 
 // ── GET (Vercel Cron) ─────────────────────────────────────────────────────────
@@ -44,17 +69,17 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await runTickCycle();
+    const result = await executeTick('cron');
     return NextResponse.json({
       ok:        true,
       trigger:   'cron',
       processed: result.processed,
       errors:    result.errors.length,
       summary:   result.results.map(r => ({
-        agent:    r.agentSlug,
-        market:   r.marketTitle.slice(0, 60),
-        action:   r.action,
-        pnl:      r.unrealizedPnl.toFixed(2),
+        agent:  r.agentSlug,
+        market: r.marketTitle.slice(0, 60),
+        action: r.action,
+        pnl:    r.unrealizedPnl.toFixed(2),
       })),
     });
   } catch (err: any) {
@@ -71,15 +96,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runTickCycle();
-
+    const result = await executeTick('manual');
     return NextResponse.json({
-      ok:        true,
-      trigger:   'manual',
-      processed: result.processed,
-      errors:    result.errors.length,
+      ok:            true,
+      trigger:       'manual',
+      processed:     result.processed,
+      errors:        result.errors.length,
       errorMessages: result.errors.slice(0, 10),
-      results:   result.results.map(r => ({
+      results:       result.results.map(r => ({
         positionId: r.positionId,
         agent:      r.agentSlug,
         market:     r.marketTitle.slice(0, 80),

@@ -16,6 +16,7 @@ import { runAllAgentsOnRound } from '@/lib/forecast/runner';
 import { openPosition } from '@/lib/forecast/positions';
 import { scoreMarket, selectTopMarkets, detectDomain, type MarketForScoring } from '@/lib/forecast/market-scorer';
 import { getNewsCountOnly, getOrRefreshContext } from '@/lib/forecast/news-context';
+import { runLightCycle } from '@/lib/forecast/light-cycle';
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -278,6 +279,41 @@ export async function runDailyCycleAction(): Promise<ActionResult> {
     };
   } catch (err: any) {
     return { ok: false, message: err?.message ?? 'Daily cycle failed' };
+  }
+}
+
+// ── Light Cycle ───────────────────────────────────────────────────────────────
+
+export async function runLightCycleAction(): Promise<ActionResult> {
+  try {
+    const result = await runLightCycle('manual');
+    if (!result.ok && result.paused) {
+      return {
+        ok:      false,
+        message: `Light cycles paused: ${result.cycles_today ?? 0}/${result.max_cycles ?? 6} daily limit reached`,
+        detail:  { reason: result.reason, cycles_today: result.cycles_today, max_cycles: result.max_cycles },
+      };
+    }
+    const rounds    = result.rounds?.created    ?? 0;
+    const positions = result.rounds?.positions  ?? 0;
+    const skipped   = result.rounds?.skipped_price ?? 0;
+    return {
+      ok:      true,
+      message: `Light cycle done: ${rounds} round(s) opened, ${positions} position(s), ${skipped} skipped (no price move)`,
+      detail:  {
+        sync:         result.sync,
+        score:        { total: result.score?.total, selected: result.score?.selected },
+        rounds,
+        positions,
+        skipped_price: skipped,
+        skipped_capital: result.rounds?.skipped_capital,
+        cycles_today:  result.cycles_today,
+        max_cycles:    result.max_cycles,
+        elapsed_ms:    result.elapsed_ms,
+      },
+    };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? 'Light cycle failed' };
   }
 }
 

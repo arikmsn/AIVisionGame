@@ -94,12 +94,20 @@ export default async function DashboardPage() {
   let marketScoreStats: { total: number; selected: number } = { total: 0, selected: 0 };
 
   // System status timestamps
-  let lastScoreAt:      string | undefined;
-  let lastContextAt:    string | undefined;
-  let lastRoundAt:      string | undefined;
-  let lastDailyCycleAt: string | undefined;
+  let lastScoreAt:       string | undefined;
+  let lastContextAt:     string | undefined;
+  let lastRoundAt:       string | undefined;
+  let lastDailyCycleAt:  string | undefined;
+  let lastLightCycleAt:  string | undefined;
+  let lightCyclesToday   = 0;
+  let lightCyclePaused   = false;
 
   try {
+    // Build today's UTC midnight ISO string for "today" queries
+    const todayUtc = new Date();
+    todayUtc.setUTCHours(0, 0, 0, 0);
+    const todayIso = todayUtc.toISOString();
+
     [bankroll, openPos, closedPos, recentRounds, tickAudit, syncJobs, experimentCfg] = await Promise.all([
       sfetch('fa_central_bankroll?select=*&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
       sfetch('fa_v_open_positions?select=position_id,agent_display_name,market_title,side,size_usd,cost_basis_usd,avg_entry_price,current_price,unrealized_pnl,realized_pnl,tick_count,last_action,opened_at&order=opened_at.desc').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
@@ -107,21 +115,30 @@ export default async function DashboardPage() {
       sfetch('fa_v_round_summary?select=round_id,round_number,market_title,market_yes_price_at_open,round_status,submission_count,opened_at&order=opened_at.desc&limit=5').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_audit_events?event_type=eq.tick_cycle&select=created_at,payload_json&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_sync_jobs?select=status,started_at,records_processed&order=started_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
-      sfetch('fa_experiment_config?status=eq.active&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+      sfetch('fa_experiment_config?status=eq.active&select=*&order=created_at.desc&limit=1').then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
     ]);
 
-    // System status: last scoring, context, round, daily cycle
-    const [scoreRow, contextRow, dailyCycleRow] = await Promise.all([
+    // System status: last scoring, context, round, daily cycle, light cycle
+    const [scoreRow, contextRow, dailyCycleRow, lightCycleRow, lightCycleTodayRows, lightCyclePausedRow] = await Promise.all([
       sfetch('fa_market_scores?select=scored_at&order=scored_at.desc&limit=1')
         .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
       sfetch('fa_market_context?select=last_updated_at&order=last_updated_at.desc&limit=1')
         .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
       sfetch('fa_audit_events?event_type=eq.daily_cycle&select=created_at&order=created_at.desc&limit=1')
         .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+      sfetch('fa_audit_events?event_type=eq.light_cycle&select=created_at,payload_json&order=created_at.desc&limit=1')
+        .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
+      sfetch(`fa_audit_events?event_type=eq.light_cycle&created_at=gte.${todayIso}&select=id`)
+        .then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+      sfetch(`fa_audit_events?event_type=eq.light_cycle_paused&created_at=gte.${todayIso}&select=created_at&order=created_at.desc&limit=1`)
+        .then((r: any) => Array.isArray(r) ? r[0] ?? null : null).catch(() => null),
     ]);
     lastScoreAt      = scoreRow?.scored_at;
     lastContextAt    = contextRow?.last_updated_at;
     lastDailyCycleAt = dailyCycleRow?.created_at;
+    lastLightCycleAt = lightCycleRow?.created_at;
+    lightCyclesToday = lightCycleTodayRows.length;
+    lightCyclePaused = !!lightCyclePausedRow;
     lastRoundAt      = recentRounds[0]?.opened_at;
 
     // Market score stats
@@ -165,8 +182,10 @@ export default async function DashboardPage() {
   const netValue      = totalDeposit + netPnl;
   const allocatedPct  = totalDeposit > 0 ? (allocatedUsd / totalDeposit * 100).toFixed(1) : '0.0';
 
-  const lastTickTime = tickAudit[0]?.created_at;
-  const lastSyncTime = syncJobs[0]?.started_at;
+  const lastTickTime        = tickAudit[0]?.created_at;
+  const lastSyncTime        = syncJobs[0]?.started_at;
+  const tickIntervalMin     = Number(experimentCfg?.tick_interval_minutes    ?? 15);
+  const maxLightCycles      = Number(experimentCfg?.max_light_cycles_per_day ?? 6);
 
   const subsByRound = new Map<string, any[]>();
   for (const s of submissions) {
@@ -184,28 +203,53 @@ export default async function DashboardPage() {
     : null;
 
   // ── System status items ────────────────────────────────────────────────────
+  // Tick: warn if missed 2 intervals, red if missed 6
+  const tickWarnH  = (tickIntervalMin * 2)  / 60;
+  const tickStaleH = (tickIntervalMin * 6)  / 60;
+  // Light cycle: 6×/day ≈ every 4h — warn at 5h, red at 10h
+  const lightWarnH  = 5;
+  const lightStaleH = 10;
 
   const systemItems = [
     {
-      label:  'Market Sync',
-      time:   lastSyncTime,
-      ok:     !!lastSyncTime,
-      warn:   12, stale: 48,     // hours
-      detail: `${syncJobs[0]?.records_processed ?? 0} records`,
+      label:  `Tick · every ${tickIntervalMin}m`,
+      time:   lastTickTime,
+      ok:     !!lastTickTime,
+      warn:   tickWarnH,
+      stale:  tickStaleH,
+      detail: `${tickAudit[0]?.payload_json?.processed ?? 0} positions · stop-loss/expiry/target`,
+    },
+    {
+      label:  `Light Cycle · ${lightCyclesToday}/${maxLightCycles} today`,
+      time:   lastLightCycleAt,
+      ok:     !!lastLightCycleAt && !lightCyclePaused,
+      warn:   lightWarnH,
+      stale:  lightStaleH,
+      detail: lightCyclePaused
+        ? '⚠ paused — daily limit reached'
+        : `sync → score (cached) → rounds if price moved`,
+      paused: lightCyclePaused,
+    },
+    {
+      label:  'Daily Cycle · 06:00 UTC',
+      time:   lastDailyCycleAt,
+      ok:     !!lastDailyCycleAt,
+      warn:   24, stale: 48,
+      detail: 'full refresh: sync → score → news → rounds → tick',
     },
     {
       label:  'Market Scoring',
       time:   lastScoreAt,
       ok:     !!lastScoreAt,
-      warn:   12, stale: 48,
-      detail: `${marketScoreStats.total} scored, ${marketScoreStats.selected} selected`,
+      warn:   5, stale: 12,
+      detail: `${marketScoreStats.total} scored · ${marketScoreStats.selected} selected`,
     },
     {
       label:  'News Context',
       time:   lastContextAt,
       ok:     !!lastContextAt,
-      warn:   10, stale: 24,
-      detail: '',
+      warn:   10, stale: 26,
+      detail: 'refreshed by daily cycle only',
     },
     {
       label:  'Last Round',
@@ -214,21 +258,10 @@ export default async function DashboardPage() {
       warn:   12, stale: 48,
       detail: '',
     },
-    {
-      label:  'Last Tick',
-      time:   lastTickTime,
-      ok:     !!lastTickTime,
-      warn:   12, stale: 48,
-      detail: `${tickAudit[0]?.payload_json?.processed ?? 0} positions`,
-    },
-    {
-      label:  'Daily Cycle',
-      time:   lastDailyCycleAt,
-      ok:     !!lastDailyCycleAt,
-      warn:   24, stale: 48,
-      detail: '06:00 + 18:00 UTC',
-    },
-  ];
+  ] as Array<{
+    label: string; time: string | undefined; ok: boolean;
+    warn: number; stale: number; detail: string; paused?: boolean;
+  }>;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -514,11 +547,14 @@ export default async function DashboardPage() {
           gap: '8px',
         }}>
           {systemItems.map((item) => {
-            const dotColor = item.time
-              ? statusColor(item.time, item.warn, item.stale)
-              : '#f87171';
+            const isPaused  = item.paused === true;
+            const dotColor  = isPaused
+              ? '#f59e0b'     // amber for paused
+              : item.time
+                ? statusColor(item.time, item.warn, item.stale)
+                : '#f87171';
             const isHealthy = dotColor === '#4ade80';
-            const isWarn    = dotColor === '#fbbf24';
+            const isWarn    = dotColor === '#fbbf24' || dotColor === '#f59e0b';
             return (
               <div key={item.label} style={{
                 background:   '#0a0a0a',
@@ -538,17 +574,23 @@ export default async function DashboardPage() {
                   }} />
                 </div>
                 <div style={{ fontSize: '0.78rem', fontWeight: 600, color: item.time ? '#888' : '#444' }}>
-                  {relTime(item.time)}
+                  {isPaused ? 'paused' : relTime(item.time)}
                 </div>
                 {item.detail && (
-                  <div style={{ fontSize: '0.58rem', color: '#333', marginTop: '3px' }}>{item.detail}</div>
+                  <div style={{
+                    fontSize: '0.58rem',
+                    color: isPaused ? '#92400e' : '#333',
+                    marginTop: '3px',
+                  }}>
+                    {item.detail}
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
         <div style={{ marginTop: '8px', fontSize: '0.62rem', color: '#2a2a2a', padding: '0 2px' }}>
-          Cron schedule: daily-cycle at 06:00 UTC (full cycle) · tick at 18:00 UTC (position management)
+          Cron: tick every {tickIntervalMin}m · light-cycle 6×/day (01:00 05:00 09:00 13:00 17:00 21:00 UTC) · daily-cycle 06:00 UTC
         </div>
       </section>
 

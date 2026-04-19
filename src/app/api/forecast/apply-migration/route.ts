@@ -393,6 +393,20 @@ const MIGRATION_016 = [
   `ALTER TABLE fa_market_context ADD COLUMN IF NOT EXISTS provider text NOT NULL DEFAULT 'thenewsapi'`,
 ];
 
+// ── Migration 017: Always-on scheduler config columns ─────────────────────────
+//
+// Adds three columns to fa_experiment_config:
+//   max_light_cycles_per_day  — budget cap: how many light cycles can run today
+//   tick_interval_minutes     — informational: displayed in System Status
+//   min_price_change_pct      — threshold: run a new round only if price moved this much
+
+const MIGRATION_017 = [
+  `ALTER TABLE fa_experiment_config
+     ADD COLUMN IF NOT EXISTS max_light_cycles_per_day integer       NOT NULL DEFAULT 6,
+     ADD COLUMN IF NOT EXISTS tick_interval_minutes    integer       NOT NULL DEFAULT 15,
+     ADD COLUMN IF NOT EXISTS min_price_change_pct     numeric(5,2)  NOT NULL DEFAULT 3.0`,
+];
+
 async function executeSql(sql: string, url: string, key: string): Promise<{ ok: boolean; error?: string }> {
   // Use Supabase's pg endpoint via the Management API isn't available,
   // so we use the RPC approach: create a temporary function
@@ -432,6 +446,7 @@ export async function POST(request: NextRequest) {
     '014': MIGRATION_014,
     '015': MIGRATION_015,
     '016': MIGRATION_016,
+    '017': MIGRATION_017,
   };
   const statements = statementsMap[migration] ?? MIGRATION_STATEMENTS;
   const fullSql = statements.join(';\n\n') + ';';
