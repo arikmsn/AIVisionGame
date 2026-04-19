@@ -9,12 +9,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const PRIMARY_NAV = [
-  { href: '/forecast-arena/dashboard',  label: 'Dashboard',  en: 'Control Center' },
-  { href: '/forecast-arena/decisions',  label: 'Decisions',  en: 'Decisions' },
-  { href: '/forecast-arena/positions',  label: 'Positions',  en: 'Positions' },
-  { href: '/forecast-arena/finance',    label: 'Finance',    en: 'Finance' },
-  { href: '/forecast-arena/markets',    label: 'Markets',    en: 'Markets' },
-  { href: '/forecast-arena/experiment', label: 'Experiment', en: 'Experiment' },
+  { href: '/forecast-arena/dashboard',  label: 'Dashboard'    },
+  { href: '/forecast-arena/decisions',  label: 'Decision Log' },
+  { href: '/forecast-arena/positions',  label: 'Positions'    },
+  { href: '/forecast-arena/finance',    label: 'Finance'      },
+  { href: '/forecast-arena/markets',    label: 'Markets'      },
+  { href: '/forecast-arena/experiment', label: 'Strategy'     },
 ];
 
 const SECONDARY_NAV = [
@@ -54,7 +54,7 @@ export function ForecastNav() {
     }}>
       {PRIMARY_NAV.map(item => (
         <Link key={item.href} href={item.href} style={linkStyle(item.href)}>
-          <span>{item.label}</span>
+          {item.label}
         </Link>
       ))}
 
@@ -66,7 +66,7 @@ export function ForecastNav() {
           ...linkStyle(item.href),
           color: isActive(item.href) ? '#080808' : '#444',
         }}>
-          <span>{item.label}</span>
+          {item.label}
         </Link>
       ))}
     </nav>

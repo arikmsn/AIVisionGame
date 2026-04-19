@@ -43,7 +43,7 @@ export default function ForecastArenaLayout({
           Forecast Arena
         </h1>
         <span style={{ color: '#333', fontSize: '0.72rem' }}>
-          Prediction market investment system
+          Model-driven trading · paper portfolio
         </span>
       </header>
       <ForecastNav />

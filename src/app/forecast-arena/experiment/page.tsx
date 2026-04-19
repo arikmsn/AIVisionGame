@@ -1,5 +1,5 @@
 /**
- * /forecast-arena/experiment — Experiment Evaluation Dashboard
+ * /forecast-arena/experiment — Strategy Dashboard
  */
 
 import { sfetch } from '@/lib/forecast/db';
@@ -7,6 +7,24 @@ import { sfetch } from '@/lib/forecast/db';
 export const dynamic = 'force-dynamic';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Map raw experiment metadata to an operator-facing strategy label. */
+function strategyLabel(domain?: string, name?: string): string {
+  if (!domain && !name) return 'Active Strategy';
+  const d = (domain ?? '').toLowerCase();
+  if (d === 'sports')  return 'Sports Markets Strategy';
+  if (d === 'politics' || d === 'political') return 'Political Markets Strategy';
+  if (d === 'crypto')  return 'Crypto Markets Strategy';
+  if (d === 'finance' || d === 'financial')  return 'Financial Markets Strategy';
+  // Fall back: strip "pilot", "season N", "test" noise from name
+  const clean = (name ?? domain ?? '')
+    .replace(/pilot\s*(season\s*\d+)?/gi, '')
+    .replace(/season\s*\d+/gi, '')
+    .replace(/test/gi, '')
+    .trim()
+    .replace(/\s+/g, ' ');
+  return clean ? `${clean} Strategy` : 'Active Strategy';
+}
 
 const $ = (n: number, dec = 2) =>
   `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}`;
@@ -59,7 +77,7 @@ function SectionHeader({ title }: { title: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default async function ExperimentPage() {
+export default async function StrategyPage() {
   let experimentCfg: any   = null;
   let bankroll:      any   = null;
   let openPositions: any[] = [];
@@ -159,7 +177,7 @@ export default async function ExperimentPage() {
   return (
     <div>
 
-      {/* A. Experiment Header */}
+      {/* A. Strategy Header */}
       <section style={{ marginBottom: '28px' }}>
         <div style={{
           background: '#090909', border: '1px solid #1e2a1e', borderRadius: '8px',
@@ -168,25 +186,39 @@ export default async function ExperimentPage() {
           {experimentCfg ? (
             <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: '0.6rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Experiment</div>
+                <div style={{ fontSize: '0.6rem', color: '#444', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Active Strategy</div>
                 <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#d4f25a', marginTop: '3px' }}>
-                  {experimentCfg.name}
+                  {strategyLabel(experimentCfg.domain, experimentCfg.name)}
                 </div>
               </div>
               <div style={{ fontSize: '0.78rem', color: '#888', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                <span><span style={{ color: '#555' }}>Domain: </span><strong style={{ color: '#fbbf24' }}>{experimentCfg.domain}</strong></span>
-                <span><span style={{ color: '#555' }}>Status: </span><strong style={{ color: '#4ade80' }}>{experimentCfg.status}</strong></span>
+                <span>
+                  <span style={{ color: '#555' }}>Status: </span>
+                  <span style={{
+                    display: 'inline-block', padding: '1px 7px', borderRadius: '3px',
+                    background: '#0d1a0d', border: '1px solid #1e4d1e',
+                    color: '#4ade80', fontSize: '0.68rem', fontWeight: 700,
+                  }}>
+                    {experimentCfg.status?.toUpperCase() ?? 'ACTIVE'}
+                  </span>
+                </span>
                 {expStarted && (
-                  <span><span style={{ color: '#555' }}>Started: </span><strong>{expStarted.toLocaleDateString()} ({expDaysAgo}d ago)</strong></span>
+                  <span>
+                    <span style={{ color: '#555' }}>Running: </span>
+                    <strong>{expDaysAgo === 0 ? 'since today' : `${expDaysAgo}d`}</strong>
+                    <span style={{ color: '#444', marginLeft: '5px' }}>
+                      (since {expStarted.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})
+                    </span>
+                  </span>
                 )}
-                <span><span style={{ color: '#555' }}>Risk/pos: </span><strong>{(Number(experimentCfg.risk_per_position_pct ?? 0.02) * 100).toFixed(1)}%</strong></span>
-                <span><span style={{ color: '#555' }}>Max markets/run: </span><strong>{experimentCfg.max_markets_per_run}</strong></span>
-                <span><span style={{ color: '#555' }}>Min score: </span><strong>{experimentCfg.min_score_threshold}</strong></span>
+                <span><span style={{ color: '#555' }}>Risk/position: </span><strong>{(Number(experimentCfg.risk_per_position_pct ?? 0.02) * 100).toFixed(1)}%</strong></span>
+                <span><span style={{ color: '#555' }}>Markets/run: </span><strong>{experimentCfg.max_markets_per_run}</strong></span>
+                <span><span style={{ color: '#555' }}>Min edge score: </span><strong>{experimentCfg.min_score_threshold}</strong></span>
               </div>
             </div>
           ) : (
             <p style={{ color: '#555', fontSize: '0.8rem', margin: 0 }}>
-              No active experiment. Run migration 015 to initialise.
+              No active strategy configured.
             </p>
           )}
         </div>
