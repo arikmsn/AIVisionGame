@@ -10,12 +10,17 @@ export const dynamic = 'force-dynamic';
 
 function DomainBadge({ domain }: { domain: string }) {
   const colors: Record<string, { bg: string; color: string }> = {
-    sports:   { bg: '#1a1500', color: '#fbbf24' },
-    politics: { bg: '#001233', color: '#60a5fa' },
-    crypto:   { bg: '#1a0d00', color: '#f97316' },
-    general:  { bg: '#161616', color: '#6b7280' },
+    sports:      { bg: '#1a1500', color: '#fbbf24' },
+    politics:    { bg: '#001233', color: '#60a5fa' },
+    geopolitics: { bg: '#001233', color: '#818cf8' },
+    crypto:      { bg: '#1a0d00', color: '#f97316' },
+    tech:        { bg: '#001a0d', color: '#34d399' },
+    macro:       { bg: '#0d0d1a', color: '#a78bfa' },
+    culture:     { bg: '#1a001a', color: '#e879f9' },
+    other:       { bg: '#161616', color: '#6b7280' },
+    general:     { bg: '#161616', color: '#6b7280' },  // legacy fallback
   };
-  const c = colors[domain] ?? colors.general;
+  const c = colors[domain] ?? colors.other;
   return (
     <span style={{
       fontSize: '0.6rem', fontWeight: 600, padding: '2px 7px', borderRadius: '3px',
@@ -108,7 +113,7 @@ export default async function MarketsPage() {
                 const isSelected  = Boolean(m.is_selected);
                 const yesPrice    = m.current_yes_price != null ? Number(m.current_yes_price) : null;
                 const volume      = Number(m.volume_usd ?? 0);
-                const domain      = String(m.domain ?? 'general');
+                const domain      = String(m.domain ?? 'other');
                 const sentiment   = m.sentiment ?? null;
                 const contextFresh = m.context_fresh ?? null;
                 const contextAt   = m.context_updated_at ?? null;
