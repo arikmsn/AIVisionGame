@@ -15,6 +15,8 @@ export interface ForecastAgentConfig {
   provider:       ForecastProvider | 'openai'; // openai covers legacy gpt-4o-mini
   prompt_version: string;
   strategy:       string;
+  /** v2 role-based prompt assignment (Manus §8.2). Null = use legacy strategy prompt. */
+  role:           string | null;
   is_active:      boolean;
 }
 
@@ -30,12 +32,27 @@ const CORE_SLUG: Record<string, string> = {
 };
 
 const CORE_DISPLAY: Record<string, string> = {
-  'claude-opus-4-6':              'Opus Forecaster',
-  'gpt-4.1':                      'GPT-4.1 Forecaster',
-  'claude-sonnet-4-6':            'Sonnet Forecaster',
-  'grok-4.20-0309-non-reasoning': 'Grok Forecaster',
-  'gemini-2.5-pro':               'Gemini Forecaster',
-  'qwen/qwen2.5-vl-72b-instruct': 'Qwen Forecaster',
+  'claude-opus-4-6':              'Opus — Base Rate Historian',
+  'gpt-4.1':                      'GPT-4.1 — News Synthesizer',
+  'claude-sonnet-4-6':            'Sonnet — Devil\'s Advocate',
+  'grok-4.20-0309-non-reasoning': 'Grok — Contrarian',
+  'gemini-2.5-pro':               'Gemini — Quant Modeler',
+  'qwen/qwen2.5-vl-72b-instruct': 'Qwen — Synthesis Judge',
+};
+
+/**
+ * Role assignments for v2 prompting (Manus §8.2).
+ * Each model plays a distinct epistemic role. Aggregator weights stay at 1.0.
+ * prompt_version bumped to 'v2' so calibration events can be split
+ * pre- vs. post-role by joining fa_submissions.metadata_json->>'prompt_version'.
+ */
+const CORE_ROLE: Record<string, string> = {
+  'claude-opus-4-6':              'base_rate',
+  'gpt-4.1':                      'news_synthesis',
+  'claude-sonnet-4-6':            'devil_advocate',
+  'grok-4.20-0309-non-reasoning': 'contrarian',
+  'gemini-2.5-pro':               'quant_modeler',
+  'qwen/qwen2.5-vl-72b-instruct': 'synthesis_judge',
 };
 
 // ── Core League: 6 agents ────────────────────────────────────────────────────
@@ -45,8 +62,9 @@ export const CORE_FORECAST_AGENTS: ForecastAgentConfig[] = FORECAST_MODEL_REGIST
   display_name:   CORE_DISPLAY[m.modelId] ?? `${m.displayName} Forecaster`,
   model_id:       m.modelId,
   provider:       m.provider,
-  prompt_version: 'v1',
+  prompt_version: 'v2',
   strategy:       'balanced',
+  role:           CORE_ROLE[m.modelId] ?? null,
   is_active:      true,
 }));
 
@@ -60,6 +78,7 @@ export const LEGACY_FORECAST_AGENTS: ForecastAgentConfig[] = [
     provider:       'anthropic',
     prompt_version: 'v1',
     strategy:       'speed_first',
+    role:           null,
     is_active:      false,
   },
   {
@@ -69,6 +88,7 @@ export const LEGACY_FORECAST_AGENTS: ForecastAgentConfig[] = [
     provider:       'anthropic',
     prompt_version: 'v1',
     strategy:       'text_heavy',
+    role:           null,
     is_active:      false,
   },
   {
@@ -78,6 +98,7 @@ export const LEGACY_FORECAST_AGENTS: ForecastAgentConfig[] = [
     provider:       'openai',
     prompt_version: 'v1',
     strategy:       'contrarian',
+    role:           null,
     is_active:      false,
   },
   {
@@ -87,6 +108,7 @@ export const LEGACY_FORECAST_AGENTS: ForecastAgentConfig[] = [
     provider:       'openai',
     prompt_version: 'v1',
     strategy:       'anchored',
+    role:           null,
     is_active:      false,
   },
 ];
@@ -107,7 +129,10 @@ export function agentSeedRows() {
     model_id:              a.model_id,
     provider:              a.provider,
     prompt_version:        a.prompt_version,
-    strategy_profile_json: { strategy: a.strategy },
+    strategy_profile_json: {
+      strategy: a.strategy,
+      ...(a.role ? { role: a.role } : {}),
+    },
     is_active:             a.is_active,
   }));
 }

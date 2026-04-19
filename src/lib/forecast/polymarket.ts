@@ -44,8 +44,9 @@ export interface PolymarketSnapshot {
 const GAMMA_BASE = 'https://gamma-api.polymarket.com';
 const CLOB_BASE  = 'https://clob.polymarket.com';
 
-export async function fetchActiveMarkets(limit = 50, offset = 0): Promise<PolymarketMarket[]> {
-  const url = `${GAMMA_BASE}/markets?active=true&closed=false&limit=${limit}&offset=${offset}`;
+export async function fetchActiveMarkets(limit = 50, offset = 0, category?: string): Promise<PolymarketMarket[]> {
+  const catParam = category ? `&category=${encodeURIComponent(category)}` : '';
+  const url = `${GAMMA_BASE}/markets?active=true&closed=false&limit=${limit}&offset=${offset}${catParam}`;
   console.log(`[FA/POLY] Fetching markets: ${url}`);
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
@@ -58,6 +59,35 @@ export async function fetchActiveMarkets(limit = 50, offset = 0): Promise<Polyma
   const data = await res.json();
   // gamma-api may return array directly or wrapped
   return Array.isArray(data) ? data : (data.markets ?? data.data ?? []);
+}
+
+/**
+ * Fetch markets across the thesis-aligned categories (politics, crypto, tech)
+ * for domains where LLMs have genuine predictive edge. Used by the
+ * targeted-sync admin route to counterbalance the sports-heavy default feed.
+ *
+ * Polymarket category strings (observed): "Politics", "Crypto", "Science",
+ * "Pop Culture", "Sports", "Business & Finance", "News", "Tech & AI"
+ */
+export async function fetchTargetedMarkets(limitPerCategory = 30): Promise<PolymarketMarket[]> {
+  const THESIS_CATEGORIES = ['Politics', 'Crypto', 'Tech & AI', 'Business & Finance', 'News', 'Science'];
+  const all: PolymarketMarket[] = [];
+  const seen = new Set<string>();
+
+  for (const cat of THESIS_CATEGORIES) {
+    try {
+      const markets = await fetchActiveMarkets(limitPerCategory, 0, cat);
+      for (const m of markets) {
+        const id = extractExternalId(m);
+        if (id && !seen.has(id)) { seen.add(id); all.push(m); }
+      }
+    } catch (err: any) {
+      console.warn(`[FA/POLY] targeted fetch failed for category "${cat}": ${err?.message}`);
+    }
+  }
+
+  console.log(`[FA/POLY] Targeted fetch: ${all.length} unique markets across ${THESIS_CATEGORIES.length} categories`);
+  return all;
 }
 
 export async function fetchMarketById(conditionId: string): Promise<PolymarketMarket> {

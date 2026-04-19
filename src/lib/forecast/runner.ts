@@ -215,6 +215,9 @@ export async function runAgentOnRound(
   const modelId   = agentDb.model_id;
   const provider  = agentDb.provider;
   const strategy  = agentDb.strategy_profile_json?.strategy ?? 'balanced';
+  // v2: role-based prompting (Manus §8.2). Null → falls back to strategy prompt.
+  const role      = (agentDb.strategy_profile_json?.role as string | null) ?? null;
+  const promptVer = role ? 'v2' : 'v1';
   const maxTokens = getModelConfig(modelId)?.maxTokens ?? 1500;
 
   // 2. Get round + market context
@@ -257,7 +260,7 @@ export async function runAgentOnRound(
     newsContext:     newsCtx,
   };
 
-  const systemPrompt = buildSystemPrompt(strategy);
+  const systemPrompt = buildSystemPrompt(strategy, role);
   const userMessage  = buildUserMessage(ctx);
 
   // 4. Call model
@@ -323,6 +326,9 @@ export async function runAgentOnRound(
     output_tokens:    response.outputTokens,
     cost_usd:         costUsd,
     latency_ms:       response.latencyMs,
+    // Diagnostic metadata — enables pre/post role-based Brier comparison.
+    // prompt_version: 'v1' = legacy balanced monoculture, 'v2' = role-based.
+    metadata_json:    { prompt_version: promptVer, role: role ?? 'none' },
   }], { returning: true });
 
   const submissionId = Array.isArray(submissionRows) && submissionRows[0]
