@@ -73,7 +73,7 @@ export default async function AdminPage() {
       sfetch('fa_sync_jobs?select=*&order=started_at.desc&limit=10').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_audit_events?select=*&order=created_at.desc&limit=40').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
       sfetch('fa_market_context?select=market_id,last_updated_at,provider').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
-      sfetch('fa_benchmarks?window=eq.90d&order=computed_at.desc&limit=500&select=*').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
+      sfetch('fa_benchmarks?time_window=eq.90d&order=computed_at.desc&limit=500&select=*').then((r: any) => Array.isArray(r) ? r : []).catch(() => []),
     ]);
   } catch { /* ok */ }
 

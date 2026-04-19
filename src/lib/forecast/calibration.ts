@@ -190,7 +190,7 @@ export async function rolloverWindows(
         rows.push({
           agent_id:    agentId,
           domain,
-          window:      w,
+          time_window: w,
           brier_score: brierMean,
           log_loss:    logLossMean,
           hit_rate:    hitRate,
@@ -202,7 +202,7 @@ export async function rolloverWindows(
 
       if (rows.length > 0) {
         // Composite on_conflict — PostgREST needs comma-separated columns
-        const ok = await faUpsert('fa_model_calibration', rows, 'agent_id,domain,window');
+        const ok = await faUpsert('fa_model_calibration', rows, 'agent_id,domain,time_window');
         if (ok) upsertedTotal += rows.length;
       }
     }

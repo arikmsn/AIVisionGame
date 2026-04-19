@@ -16,7 +16,7 @@ interface BenchmarkRow {
   id:               string;
   computed_at:      string;
   computed_day:     string;
-  window:           string;
+  time_window:      string;
   domain:           string;
   baseline:         string;
   baseline_detail:  string | null;
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   try {
     const rows = await faSelect<BenchmarkRow>(
       'fa_benchmarks',
-      `window=eq.${window}&order=computed_at.desc&limit=2000&select=*`,
+      `time_window=eq.${window}&order=computed_at.desc&limit=2000&select=*`,
     );
 
     // Keep only most-recent row per (domain, baseline)

@@ -62,18 +62,18 @@ CREATE INDEX IF NOT EXISTS idx_fa_calib_events_domain_resolved
 CREATE TABLE IF NOT EXISTS fa_model_calibration (
   agent_id        uuid        NOT NULL REFERENCES fa_agents(id) ON DELETE CASCADE,
   domain          text        NOT NULL,
-  window          text        NOT NULL,          -- '30d' | '90d' | 'all'
+  time_window     text        NOT NULL,          -- '30d' | '90d' | 'all'
   brier_score     numeric(8,6),
   log_loss        numeric(8,6),
   hit_rate        numeric(6,4),                  -- fraction where sign(p_model - 0.5) matches outcome
   mean_edge       numeric(8,6),                  -- mean of (market_brier - agent_brier) across window
   n_resolved      integer     NOT NULL,
   updated_at      timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (agent_id, domain, window)
+  PRIMARY KEY (agent_id, domain, time_window)
 );
 
 CREATE INDEX IF NOT EXISTS idx_fa_model_calib_domain_window
-  ON fa_model_calibration(domain, window);
+  ON fa_model_calibration(domain, time_window);
 
 -- ── 4. Benchmark results (daily snapshot) ─────────────────────────────────────
 --
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS fa_benchmarks (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   computed_at        timestamptz NOT NULL DEFAULT now(),
   computed_day       date        NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
-  window             text        NOT NULL,
+  time_window        text        NOT NULL,
   domain             text        NOT NULL,           -- domain or 'all'
   baseline           text        NOT NULL,           -- 'market' | 'ensemble' | 'best_single' | 'agent:<slug>'
   baseline_detail    text,                           -- e.g. the slug when baseline='best_single'
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS fa_benchmarks (
   log_loss           numeric(8,6),
   calibration_slope  numeric(8,6),
   n_resolved         integer     NOT NULL,
-  UNIQUE (computed_day, window, domain, baseline)
+  UNIQUE (computed_day, time_window, domain, baseline)
 );
 
 CREATE INDEX IF NOT EXISTS idx_fa_benchmarks_domain_day

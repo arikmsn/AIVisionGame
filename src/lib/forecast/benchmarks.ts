@@ -83,7 +83,7 @@ export async function computeBenchmarks(
         benchmarkRows.push({
           computed_at:  nowIso,
           computed_day: todayDate,
-          window,
+          time_window:  window,
           domain:       dom,
           baseline:     'market',
           baseline_detail: null,
@@ -117,7 +117,7 @@ export async function computeBenchmarks(
         benchmarkRows.push({
           computed_at:  nowIso,
           computed_day: todayDate,
-          window,
+          time_window:  window,
           domain:       dom,
           baseline:     'ensemble',
           baseline_detail: null,
@@ -143,7 +143,7 @@ export async function computeBenchmarks(
         benchmarkRows.push({
           computed_at:  nowIso,
           computed_day: todayDate,
-          window,
+          time_window:  window,
           domain:       dom,
           baseline:     `agent:${slug}`,
           baseline_detail: slug,
@@ -165,7 +165,7 @@ export async function computeBenchmarks(
         benchmarkRows.push({
           computed_at:  nowIso,
           computed_day: todayDate,
-          window,
+          time_window:  window,
           domain:       dom,
           baseline:     'best_single',
           baseline_detail: slugById.get(bestId) ?? bestId,
@@ -177,7 +177,7 @@ export async function computeBenchmarks(
     }
 
     if (benchmarkRows.length > 0) {
-      await faUpsert('fa_benchmarks', benchmarkRows, 'computed_day,window,domain,baseline');
+      await faUpsert('fa_benchmarks', benchmarkRows, 'computed_day,time_window,domain,baseline');
     }
 
     await faInsert('fa_audit_events', [{
