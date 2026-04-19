@@ -92,7 +92,22 @@ async function stepScoreMarkets(domain = 'sports', topN = 5): Promise<{ ok: bool
       domain:   s.domain,
       marketId: s.market.id,
     }));
+
+    // Diagnostic: log eligible items by domain before selection
+    const eligibleItems = itemsWithDomain.filter(i => i.scored.eligible);
+    const domainCounts: Record<string, number> = {};
+    for (const i of eligibleItems) {
+      domainCounts[i.domain] = (domainCounts[i.domain] ?? 0) + 1;
+    }
+    console.log(`[DAILY] Step 2 eligible by domain: ${JSON.stringify(domainCounts)} (total=${eligibleItems.length})`);
+    const topEligible = eligibleItems
+      .sort((a, b) => b.scored.score - a.scored.score)
+      .slice(0, 10)
+      .map(i => `${i.domain}:${i.scored.score}`);
+    console.log(`[DAILY] Step 2 top-10 eligible (score-sorted): ${topEligible.join(', ')}`);
+
     const selected    = selectMarketsWithDomainBalance(itemsWithDomain, topN);
+    console.log(`[DAILY] Step 2 selected (${selected.length}): ${selected.map(s => `${s.marketId}:${s.score}`).join(', ')}`);
     const selectedIds = new Set(selected.map(s => s.marketId));
 
     const rows = scored.map(({ scored: s, market: m, domain: d }) => ({

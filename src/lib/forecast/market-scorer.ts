@@ -177,6 +177,12 @@ export function selectMarketsWithDomainBalance(
     return b.scored.score - a.scored.score;
   });
 
+  // Diagnostic: log top-5 after priority sort
+  const top5 = eligible.slice(0, 5).map(i =>
+    `${i.domain}(p=${DOMAIN_PRIORITY[i.domain] ?? 4}):${i.scored.score}`
+  );
+  console.log(`[FA/SCORER] selectMarketsWithDomainBalance top-5 after sort: ${top5.join(', ')}`);
+
   const selected: ScoredMarket[] = [];
   let sportsCount = 0;
 
