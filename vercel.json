@@ -1,16 +1,16 @@
 {
   "crons": [
     {
-      "path": "/api/forecast/tick",
-      "schedule": "*/15 * * * *"
+      "path": "/api/forecast/daily-cycle",
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/forecast/light-cycle",
-      "schedule": "0 1,5,9,13,17,21 * * *"
+      "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/forecast/daily-cycle",
-      "schedule": "0 6 * * *"
+      "path": "/api/forecast/tick",
+      "schedule": "0 12 * * *"
     }
   ]
 }
