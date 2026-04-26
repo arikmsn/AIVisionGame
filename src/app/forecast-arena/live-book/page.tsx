@@ -362,7 +362,7 @@ export default async function LiveBookPage() {
                   {/* ─ Management plan ─ */}
                   <InfoPanel label="MANAGEMENT PLAN" borderColor="#1e2830">
                     <div style={{ fontSize: '0.78rem', color: '#93c5fd', lineHeight: 1.7 }}>
-                      {mgmt.split(' · ').map((rule, i) => (
+                      {String(mgmt).split(' · ').map((rule: string, i: number) => (
                         <div key={i}>
                           <span style={{ color: '#374151' }}>›</span> {rule}
                         </div>
@@ -373,7 +373,7 @@ export default async function LiveBookPage() {
                   {/* ─ Exit strategy ─ */}
                   <InfoPanel label="EXIT STRATEGY" borderColor="#2a1a1a">
                     <div style={{ fontSize: '0.78rem', color: '#fca5a5', lineHeight: 1.7 }}>
-                      {exit.split(' · ').map((rule, i) => (
+                      {String(exit).split(' · ').map((rule: string, i: number) => (
                         <div key={i}>
                           <span style={{ color: '#374151' }}>›</span> {rule}
                         </div>
