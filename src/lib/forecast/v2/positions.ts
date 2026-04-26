@@ -21,7 +21,64 @@ import { simulateOpen, simulateClose, logAdjustment } from './execution';
 import { computeConviction }           from './signals';
 import { computeDesiredExposure }      from './desired-exposure';
 import type { V2Position, V2FillResult } from './types';
-import { V2_EXPIRY_CAUTION_H }         from './types';
+import {
+  V2_EXPIRY_CAUTION_H,
+  V2_MIN_ENTRY_EDGE,
+  V2_BASE_POSITION_PCT,
+  V2_MAX_POSITION_PCT,
+  V2_REDUCE_EDGE_THRESHOLD,
+  V2_REDUCE_DISAGREEMENT,
+  V2_CLOSE_DISAGREEMENT,
+  V2_REVERSAL_EDGE_MULTIPLIER,
+} from './types';
+
+// ── Entry narrative helpers ───────────────────────────────────────────────────
+
+function buildThesis(
+  side: 'yes' | 'no',
+  edge: number,
+  conviction: number,
+  disagreement: number,
+  domain: string | null,
+  marketPrice: number,
+  aggregatedP: number,
+  nModels: number,
+  bankroll: number,
+): string {
+  const minEdge = V2_MIN_ENTRY_EDGE[domain ?? 'other'] ?? 0.12;
+  const size    = Math.round(bankroll * V2_BASE_POSITION_PCT);
+  const edgePp  = (Math.abs(edge) * 100).toFixed(1);
+  const barPp   = (minEdge * 100).toFixed(0);
+  const mktPct  = (marketPrice * 100).toFixed(1);
+  const agPct   = (aggregatedP * 100).toFixed(1);
+  const dir     = edge >= 0 ? '+' : '–';
+  return (
+    `${nModels} models see ${agPct}% vs market ${mktPct}% → ${dir}${edgePp}pp ` +
+    `[${domain ?? 'other'}, min ${barPp}pp]. ` +
+    `Conv ${conviction.toFixed(3)} · Disagree ${disagreement.toFixed(3)} · ` +
+    `Size $${size} (${(V2_BASE_POSITION_PCT * 100).toFixed(0)}% bankroll)`
+  );
+}
+
+function buildManagementPlan(domain: string | null, bankroll: number): string {
+  const maxSize = Math.round(bankroll * V2_MAX_POSITION_PCT);
+  return (
+    `ADD: conviction ≥ 0.65 and size < $${maxSize} (${(V2_MAX_POSITION_PCT * 100).toFixed(0)}% cap) · ` +
+    `REDUCE: disagreement > ${V2_REDUCE_DISAGREEMENT} or |edge| < ${V2_REDUCE_EDGE_THRESHOLD} · ` +
+    `CLOSE: disagreement > ${V2_CLOSE_DISAGREEMENT}`
+  );
+}
+
+function buildExitTrigger(domain: string | null): string {
+  const minEdge      = V2_MIN_ENTRY_EDGE[domain ?? 'other'] ?? 0.12;
+  const reversalEdge = (minEdge * V2_REVERSAL_EDGE_MULTIPLIER).toFixed(2);
+  return (
+    `CLOSE: within 24h of resolution · ` +
+    `CLOSE: disagreement > ${V2_CLOSE_DISAGREEMENT} · ` +
+    `REDUCE: |edge| < ${V2_REDUCE_EDGE_THRESHOLD} or disagreement > ${V2_REDUCE_DISAGREEMENT} · ` +
+    `REVERSE: opposite edge ≥ ${reversalEdge}`
+  );
+}
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -37,18 +94,20 @@ export async function getOpenPosition(
 }
 
 async function createPosition(
-  pilotId:   string,
-  marketId:  string,
-  domain:    string | null,
-  side:      'yes' | 'no',
-  size:      number,
-  fill:      V2FillResult,
-  price:     number,
-  conviction: number,
-  disagreement: number,
-  edge:      number,
-  roundId:   string | null,
-  thesis:    string | null,
+  pilotId:         string,
+  marketId:        string,
+  domain:          string | null,
+  side:            'yes' | 'no',
+  size:            number,
+  fill:            V2FillResult,
+  price:           number,
+  conviction:      number,
+  disagreement:    number,
+  edge:            number,
+  roundId:         string | null,
+  thesis:          string | null,
+  managementPlan:  string | null,
+  exitTrigger:     string | null,
 ): Promise<V2Position | null> {
   const rows = await faInsert('fa_v2_positions', [{
     pilot_id:             pilotId,
@@ -73,6 +132,8 @@ async function createPosition(
     opened_at:            new Date().toISOString(),
     updated_at:           new Date().toISOString(),
     thesis,
+    management_plan:      managementPlan,
+    exit_trigger:         exitTrigger,
   }], { returning: true }) as Record<string, unknown>[] | boolean;
 
   if (!Array.isArray(rows) || rows.length === 0) return null;
@@ -92,17 +153,19 @@ async function patchPosition(
 // ── Open ──────────────────────────────────────────────────────────────────────
 
 export interface OpenPositionInput {
-  pilotId:     string;
-  marketId:    string;
-  domain:      string | null;
-  side:        'yes' | 'no';
-  desiredSize: number;
-  marketPrice: number;
-  edge:        number;
-  conviction:  number;
+  pilotId:      string;
+  marketId:     string;
+  domain:       string | null;
+  side:         'yes' | 'no';
+  desiredSize:  number;
+  marketPrice:  number;
+  edge:         number;
+  conviction:   number;
   disagreement: number;
-  roundId:     string | null;
-  thesis:      string | null;
+  aggregatedP:  number;   // system consensus probability for narrative
+  nModels:      number;   // how many models contributed
+  roundId:      string | null;
+  thesis:       string | null;  // if null, auto-generated
 }
 
 export async function openPosition(input: OpenPositionInput): Promise<{ ok: boolean; reason?: string }> {
@@ -122,12 +185,20 @@ export async function openPosition(input: OpenPositionInput): Promise<{ ok: bool
   });
   if (!risk.approved) return { ok: false, reason: risk.denial_reason ?? 'risk denied' };
 
+  const bankroll = Number(pilot.initial_bankroll_usd);
+  const thesis = input.thesis ?? buildThesis(
+    input.side, input.edge, input.conviction, input.disagreement,
+    input.domain, input.marketPrice, input.aggregatedP, input.nModels, bankroll,
+  );
+  const managementPlan = buildManagementPlan(input.domain, bankroll);
+  const exitTrigger    = buildExitTrigger(input.domain);
+
   const fill = simulateOpen(risk.approved_size);
   const pos  = await createPosition(
     input.pilotId, input.marketId, input.domain, input.side,
     risk.approved_size, fill, input.marketPrice,
     input.conviction, input.disagreement, input.edge,
-    input.roundId, input.thesis,
+    input.roundId, thesis, managementPlan, exitTrigger,
   );
   if (!pos) return { ok: false, reason: 'db insert failed' };
 
@@ -146,7 +217,7 @@ export async function openPosition(input: OpenPositionInput): Promise<{ ok: bool
     disagreement: input.disagreement,
     fill,
     source:       'system',
-    reason:       `open ${input.side}: edge=${input.edge.toFixed(3)}`,
+    reason:       `open ${input.side}: edge=${input.edge.toFixed(3)} conv=${input.conviction.toFixed(3)}`,
     operatorNote: null,
     roundId:      input.roundId,
   });
@@ -379,6 +450,8 @@ export async function reversePosition(
     edge,
     conviction,
     disagreement,
+    aggregatedP: marketPrice + edge,
+    nModels:     0,
     roundId,
     thesis:      null,
   });
@@ -467,14 +540,16 @@ export async function processRoundSignal(opts: {
       if (desired.side) {
         await openPosition({
           pilotId, marketId, domain,
-          side:        desired.side,
-          desiredSize: desired.desired_size,
-          marketPrice: mp,
-          edge:        decision.aggregatedEdge,
+          side:         desired.side,
+          desiredSize:  desired.desired_size,
+          marketPrice:  mp,
+          edge:         decision.aggregatedEdge,
           conviction,
           disagreement: decision.disagreement,
+          aggregatedP:  decision.aggregatedP,
+          nModels:      decision.modelCount ?? 0,
           roundId,
-          thesis:      desired.reason,
+          thesis:       null, // auto-generated from buildThesis()
         });
       }
       break;

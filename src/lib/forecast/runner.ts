@@ -374,12 +374,18 @@ export async function runAgentOnRound(
 /**
  * Run all active agents on a round in parallel.
  * Active agents are determined by fa_agents.is_active = true in the DB.
- * Toggle is_active in the DB to include/exclude any agent without a deploy.
+ * If pilotId + marketId are supplied, each successful call is logged to
+ * fa_v2_ai_usage for cost tracking.
  */
-export async function runAllAgentsOnRound(roundId: string): Promise<SubmissionResult[]> {
-  const agents = await faSelect<{ slug: string }>(
+export async function runAllAgentsOnRound(
+  roundId:  string,
+  pilotId?: string,
+  marketId?: string,
+  domain?:  string,
+): Promise<SubmissionResult[]> {
+  const agents = await faSelect<{ slug: string; id: string; model_id: string; strategy_profile_json: any }>(
     'fa_agents',
-    'is_active=eq.true&select=slug',
+    'is_active=eq.true&select=slug,id,model_id,strategy_profile_json',
   );
 
   if (agents.length === 0) {
@@ -395,6 +401,37 @@ export async function runAllAgentsOnRound(roundId: string): Promise<SubmissionRe
 
   const succeeded = results.filter(r => r.success).length;
   console.log(`[FA/RUNNER] Round ${roundId}: ${succeeded}/${results.length} agents succeeded`);
+
+  // Log per-call cost to fa_v2_ai_usage when running in a v2 pilot context
+  if (pilotId && marketId) {
+    const agentMap: Record<string, typeof agents[0]> = {};
+    for (const a of agents) agentMap[a.slug] = a;
+
+    const usageRows = results
+      .filter(r => r.success && (r.costUsd ?? 0) > 0)
+      .map(r => {
+        const ag = agentMap[r.agentSlug];
+        return {
+          pilot_id:      pilotId,
+          round_id:      roundId,
+          market_id:     marketId,
+          agent_id:      ag?.id ?? null,
+          model_id:      ag?.model_id ?? r.agentSlug,
+          role:          ag?.strategy_profile_json?.role ?? null,
+          domain:        domain ?? null,
+          input_tokens:  0,   // token breakdown not surfaced from SubmissionResult; cost stored
+          output_tokens: 0,
+          cost_usd:      r.costUsd ?? 0,
+          latency_ms:    r.latencyMs ?? null,
+        };
+      });
+
+    if (usageRows.length > 0) {
+      await faInsert('fa_v2_ai_usage', usageRows).catch(e =>
+        console.warn('[FA/RUNNER] ai_usage insert failed (non-fatal):', e?.message),
+      );
+    }
+  }
 
   return results;
 }

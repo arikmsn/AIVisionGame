@@ -247,7 +247,7 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
         // patch status to running
         const { faPatch } = await import('@/lib/forecast/db');
         await faPatch('fa_rounds', { id: roundId }, { status: 'running' });
-        const results = await runAllAgentsOnRound(roundId);
+        const results = await runAllAgentsOnRound(roundId, v2Pilot?.id, mId, mktDomain ?? undefined);
         await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
 
         // ── Aggregate model votes → ONE system decision ───────────────────────

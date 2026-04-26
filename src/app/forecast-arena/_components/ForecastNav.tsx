@@ -8,18 +8,15 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+// v2-aligned pages only. Legacy pages (dashboard, decisions, positions, finance, strategy)
+// are hidden from nav — they still exist at their URLs but reflect pre-v2 logic.
 const PRIMARY_NAV = [
-  { href: '/forecast-arena/live-book',  label: 'Live Book'    },
-  { href: '/forecast-arena/dashboard',  label: 'Dashboard'    },
-  { href: '/forecast-arena/decisions',  label: 'Decision Log' },
-  { href: '/forecast-arena/positions',  label: 'Positions'    },
-  { href: '/forecast-arena/finance',    label: 'Finance'      },
-  { href: '/forecast-arena/markets',    label: 'Markets'      },
-  { href: '/forecast-arena/experiment', label: 'Strategy'     },
+  { href: '/forecast-arena/live-book',  label: 'Live Book'  },
+  { href: '/forecast-arena/markets',    label: 'Markets'    },
 ];
 
 const SECONDARY_NAV = [
-  { href: '/forecast-arena/admin',      label: 'Admin',      en: 'Admin' },
+  { href: '/forecast-arena/admin',      label: 'Admin' },
 ];
 
 export function ForecastNav() {
