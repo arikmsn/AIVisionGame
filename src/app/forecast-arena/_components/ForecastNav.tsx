@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const PRIMARY_NAV = [
+  { href: '/forecast-arena/live-book',  label: 'Live Book'    },
   { href: '/forecast-arena/dashboard',  label: 'Dashboard'    },
   { href: '/forecast-arena/decisions',  label: 'Decision Log' },
   { href: '/forecast-arena/positions',  label: 'Positions'    },

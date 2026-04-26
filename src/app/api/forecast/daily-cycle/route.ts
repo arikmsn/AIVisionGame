@@ -26,6 +26,9 @@ import { openSystemPosition, runTickCycle } from '@/lib/forecast/positions';
 import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast/aggregator';
 import { rolloverWindows }                 from '@/lib/forecast/calibration';
 import { computeBenchmarks }                from '@/lib/forecast/benchmarks';
+import { upsertSignalFromRound, markStaleSignals } from '@/lib/forecast/v2/signals';
+import { processRoundSignal }               from '@/lib/forecast/v2/positions';
+import { getActivePilot }                   from '@/lib/forecast/v2/pilot';
 
 export const maxDuration = 300; // 5 min — full cycle can be slow
 
@@ -196,11 +199,17 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
     const seasons = await faSelect<{ id: string }>('fa_seasons', 'status=eq.active&order=created_at.desc&limit=1&select=id');
     const seasonId = seasons[0]?.id ?? null;
 
-    // Central bankroll
+    // Central bankroll (legacy positions)
     const bankrollRows = await faSelect<{ id: string; available_usd: number; allocated_usd: number }>(
       'fa_central_bankroll', 'select=id,available_usd,allocated_usd&limit=1',
     ).catch(() => []);
     const bankrollBalance = bankrollRows[0] ? Number(bankrollRows[0].available_usd) : 60000;
+
+    // v2 pilot
+    const v2Pilot = await getActivePilot().catch(() => null);
+
+    // Mark stale signals before this cycle
+    await markStaleSignals(26).catch(() => {});
 
     let totalRounds    = 0;
     let totalPositions = 0;
@@ -212,10 +221,12 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
           'fa_rounds', `market_id=eq.${mId}&order=round_number.desc&limit=1&select=round_number`,
         );
         const nextRound = (existingRounds[0]?.round_number ?? 0) + 1;
-        const mkt = await faSelect<{ current_yes_price: number }>(
-          'fa_markets', `id=eq.${mId}&select=current_yes_price`,
+        const mkt = await faSelect<{ current_yes_price: number; domain: string | null; close_time: string | null }>(
+          'fa_markets', `id=eq.${mId}&select=current_yes_price,domain,close_time`,
         );
-        const yesPrice = mkt[0]?.current_yes_price ?? null;
+        const yesPrice    = mkt[0]?.current_yes_price ?? null;
+        const mktDomain   = mkt[0]?.domain ?? null;
+        const mktCloseTime = mkt[0]?.close_time ?? null;
 
         const inserted = await faInsert('fa_rounds', [{
           season_id:                seasonId,
@@ -272,6 +283,33 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
             }).catch(() => null);
             if (positionId) totalPositions++;
           }
+        }
+
+        // ── v2: upsert signal + process desired exposure ──────────────────
+        try {
+          await upsertSignalFromRound(
+            mId,
+            v2Pilot?.id ?? null,
+            mktDomain,
+            decision,
+            roundId,
+            null,   // freshnessHours — context system will add later
+            false,  // hasCooldown — risk engine checks this
+          );
+
+          if (v2Pilot) {
+            await processRoundSignal({
+              pilotId:        v2Pilot.id,
+              marketId:       mId,
+              domain:         mktDomain,
+              decision,
+              roundId,
+              freshnessHours: null,
+              resolvesAt:     mktCloseTime,
+            });
+          }
+        } catch (v2Err: any) {
+          console.warn(`[DAILY] v2 signal/position error for ${mId}: ${v2Err?.message}`);
         }
 
         console.log(`[DAILY] Round for market ${mId}: ${results.filter(r => r.success).length} subs, ${totalPositions} pos`);
