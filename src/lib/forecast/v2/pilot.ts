@@ -34,7 +34,6 @@ export async function debitCash(
   return faPatch('fa_v2_pilots', { id: pilotId }, {
     current_cash_usd: Math.max(0, Number(p.current_cash_usd) - netCost),
     invested_usd:     Number(p.invested_usd) + netCost,
-    updated_at:       new Date().toISOString(),
   });
 }
 
@@ -56,7 +55,6 @@ export async function creditCash(
     current_cash_usd:  Number(p.current_cash_usd) + proceeds,
     invested_usd:      Math.max(0, Number(p.invested_usd) - reducedSize),
     realized_pnl_usd:  Number(p.realized_pnl_usd) + realizedPnl,
-    updated_at:        new Date().toISOString(),
   });
 }
 
@@ -72,7 +70,6 @@ export async function updateUnrealizedPnl(
   return faPatch('fa_v2_pilots', { id: pilotId }, {
     unrealized_pnl_usd: unrealizedPnl,
     invested_usd:       investedUsd,
-    updated_at:         new Date().toISOString(),
   });
 }
 
@@ -81,8 +78,5 @@ export async function setPilotStatus(
   pilotId: string,
   status:  V2Pilot['status'],
 ): Promise<boolean> {
-  return faPatch('fa_v2_pilots', { id: pilotId }, {
-    status,
-    updated_at: new Date().toISOString(),
-  });
+  return faPatch('fa_v2_pilots', { id: pilotId }, { status });
 }
