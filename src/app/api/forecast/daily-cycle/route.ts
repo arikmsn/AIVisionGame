@@ -27,7 +27,7 @@ import { aggregateVotes, decisionSnapshot, type ModelVote } from '@/lib/forecast
 import { rolloverWindows }                 from '@/lib/forecast/calibration';
 import { computeBenchmarks }                from '@/lib/forecast/benchmarks';
 import { upsertSignalFromRound, markStaleSignals } from '@/lib/forecast/v2/signals';
-import { processRoundSignal }               from '@/lib/forecast/v2/positions';
+import { processRoundSignal, markToMarketAll } from '@/lib/forecast/v2/positions';
 import { getActivePilot }                   from '@/lib/forecast/v2/pilot';
 
 export const maxDuration = 300; // 5 min — full cycle can be slow
@@ -344,6 +344,19 @@ async function stepTick(): Promise<{ ok: boolean; processed: number; error?: str
   }
 }
 
+async function stepMarkToMarket(): Promise<{ ok: boolean; updated: number; error?: string }> {
+  try {
+    const pilot = await getActivePilot();
+    if (!pilot) return { ok: true, updated: 0 };
+    const result = await markToMarketAll(pilot.id);
+    console.log(`[DAILY] Step 5b MTM: updated=${result.updated} positions`);
+    return { ok: true, updated: result.updated };
+  } catch (err: any) {
+    console.error('[DAILY] Step 5b MTM error:', err?.message);
+    return { ok: false, updated: 0, error: err?.message };
+  }
+}
+
 // ── Calibration rollover + benchmarks (diagnostic only, never blocks) ─────────
 
 async function stepCalibrationRollover(): Promise<{ ok: boolean; upserted: number; error?: string }> {
@@ -379,11 +392,12 @@ async function runDailyCycle(trigger: string) {
   const context     = await stepRefreshContext();
   const rounds      = await stepRunRounds();
   const tick        = await stepTick();
+  const mtm         = await stepMarkToMarket();
   const calibration = await stepCalibrationRollover();
   const benchmarks  = await stepBenchmarks();
 
   const elapsedMs = Date.now() - t0;
-  const steps     = { sync, score, context, rounds, tick, calibration, benchmarks };
+  const steps     = { sync, score, context, rounds, tick, mtm, calibration, benchmarks };
   const allOk     = Object.values(steps).every(s => s.ok);
 
   // Record in audit log

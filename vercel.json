@@ -5,10 +5,6 @@
       "schedule": "0 6 * * *"
     },
     {
-      "path": "/api/forecast/light-cycle",
-      "schedule": "0 9 * * *"
-    },
-    {
       "path": "/api/forecast/tick",
       "schedule": "0 12 * * *"
     }

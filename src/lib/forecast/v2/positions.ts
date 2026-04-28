@@ -15,7 +15,7 @@
 
 import { faInsert, faSelect, faPatch } from '../db';
 import type { AggregatedDecision }     from '../aggregator';
-import { getActivePilot, debitCash, creditCash } from './pilot';
+import { getActivePilot, debitCash, creditCash, updateUnrealizedPnl } from './pilot';
 import { checkRisk }                   from './risk';
 import { simulateOpen, simulateClose, logAdjustment } from './execution';
 import { computeConviction }           from './signals';
@@ -477,6 +477,39 @@ export async function markToMarket(
     current_price:  currentPrice,
     unrealized_pnl: unrealized,
   });
+}
+
+/** Mark all open v2 positions to market and update the pilot's unrealized P&L. */
+export async function markToMarketAll(pilotId: string): Promise<{ updated: number }> {
+  const positions = await faSelect<V2Position>(
+    'fa_v2_positions',
+    `pilot_id=eq.${pilotId}&status=eq.open&select=*`,
+  );
+  if (positions.length === 0) return { updated: 0 };
+
+  let totalUnrealized = 0;
+  let totalInvested   = 0;
+  let updated         = 0;
+
+  for (const pos of positions) {
+    const markets = await faSelect<{ current_yes_price: number }>(
+      'fa_markets',
+      `id=eq.${pos.market_id}&select=current_yes_price`,
+    );
+    if (!markets[0]) continue;
+    const currentPrice = markets[0].current_yes_price;
+    const avgCost    = Number(pos.avg_cost ?? pos.entry_price);
+    const costBasis  = Number(pos.cost_basis_usd);
+    const shares     = avgCost > 0 ? costBasis / avgCost : 0;
+    const unrealized = (pos.side === 'yes' ? 1 : -1) * (currentPrice - avgCost) * shares;
+    await markToMarket(pos, currentPrice);
+    totalUnrealized += unrealized;
+    totalInvested   += costBasis;
+    updated++;
+  }
+
+  await updateUnrealizedPnl(pilotId, totalUnrealized, totalInvested);
+  return { updated };
 }
 
 // ── Process round signal ──────────────────────────────────────────────────────

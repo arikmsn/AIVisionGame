@@ -18,6 +18,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runTickCycle }              from '@/lib/forecast/positions';
 import { faInsert }                  from '@/lib/forecast/db';
+import { getActivePilot }            from '@/lib/forecast/v2/pilot';
+import { markToMarketAll }           from '@/lib/forecast/v2/positions';
 
 export const maxDuration = 300; // 5 min — ticks can be slow if many positions
 
@@ -39,6 +41,14 @@ function authorizeAdmin(req: NextRequest): boolean {
 
 async function executeTick(trigger: 'cron' | 'manual') {
   const result = await runTickCycle();
+
+  // Mark v2 open positions to current market prices
+  const pilot = await getActivePilot().catch(() => null);
+  if (pilot) {
+    await markToMarketAll(pilot.id).catch(e =>
+      console.warn('[TICK] v2 MTM failed (non-fatal):', e?.message),
+    );
+  }
 
   // Summarise action counts for the audit payload
   const actionSummary = result.results.reduce<Record<string, number>>((acc, r) => {
