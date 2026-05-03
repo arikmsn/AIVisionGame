@@ -91,7 +91,7 @@ export const FORECAST_MODEL_REGISTRY: ForecastModelConfig[] = [
     accentColor:    '#4285f4',
     costPerMInput:  1.25,
     costPerMOutput: 10.00,
-    maxTokens:      8192, // thinking model needs room for CoT + answer
+    maxTokens:      32768, // thinking model: 32k total; thinkingBudget capped at 8k in callGoogle
     temperature:    0.3,
   },
   {

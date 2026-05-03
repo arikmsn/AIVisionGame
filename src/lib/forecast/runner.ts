@@ -108,7 +108,12 @@ async function callGoogle(
   const result = await Promise.race([
     model.generateContent({
       contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-      generationConfig: { maxOutputTokens: maxTokens },
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        // Cap thinking budget so reasoning doesn't consume the full token allowance.
+        // thinkingBudget=8192 reserves the rest of the 32k window for JSON output.
+        thinkingConfig: { thinkingBudget: 8192 },
+      },
     }),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Google API timeout after ${AGENT_TIMEOUT_MS}ms`)), AGENT_TIMEOUT_MS)
@@ -324,29 +329,36 @@ export async function runAgentOnRound(
     return { success: false, agentSlug, error: 'Parse error', latencyMs: response.latencyMs, costUsd };
   }
 
-  // 6. Persist submission
-  const submissionRows = await faInsert('fa_submissions', [{
-    round_id:         roundId,
-    agent_id:         agentDb.id,
-    probability_yes:  parsed.probability_yes,
-    confidence:       parsed.confidence,
-    action:           parsed.action,
-    rationale_short:  parsed.rationale_short,
-    rationale_full:   parsed.rationale_full,
-    raw_context_json: { system: systemPrompt.slice(0, 500), user: userMessage.slice(0, 1000) },
-    raw_output_json:  { raw: response.text.slice(0, 3000) },
-    input_tokens:     response.inputTokens,
-    output_tokens:    response.outputTokens,
-    cost_usd:         costUsd,
-    latency_ms:       response.latencyMs,
-    // Diagnostic metadata — enables pre/post role-based Brier comparison.
-    // prompt_version: 'v1' = legacy balanced monoculture, 'v2' = role-based.
-    metadata_json:    { prompt_version: promptVer, role: role ?? 'none' },
-  }], { returning: true });
-
-  const submissionId = Array.isArray(submissionRows) && submissionRows[0]
-    ? (submissionRows[0] as any).id
-    : undefined;
+  // 6. Persist submission — wrapped so a schema mismatch never silently kills the vote.
+  let submissionId: string | undefined;
+  try {
+    const submissionRows = await faInsert('fa_submissions', [{
+      round_id:         roundId,
+      agent_id:         agentDb.id,
+      probability_yes:  parsed.probability_yes,
+      confidence:       parsed.confidence,
+      action:           parsed.action,
+      rationale_short:  parsed.rationale_short,
+      rationale_full:   parsed.rationale_full,
+      raw_context_json: { system: systemPrompt.slice(0, 500), user: userMessage.slice(0, 1000) },
+      raw_output_json:  { raw: response.text.slice(0, 3000) },
+      input_tokens:     response.inputTokens,
+      output_tokens:    response.outputTokens,
+      cost_usd:         costUsd,
+      latency_ms:       response.latencyMs,
+      // Diagnostic metadata — enables pre/post role-based Brier comparison.
+      // prompt_version: 'v1' = legacy balanced monoculture, 'v2' = role-based.
+      metadata_json:    { prompt_version: promptVer, role: role ?? 'none' },
+    }], { returning: true });
+    submissionId = Array.isArray(submissionRows) && submissionRows[0]
+      ? (submissionRows[0] as any).id
+      : undefined;
+  } catch (dbErr: any) {
+    console.error(`[FA/RUNNER] ${agentSlug} submission persist failed: ${dbErr?.message}`);
+    // Return success=false so vote is not counted, but don't propagate —
+    // Promise.allSettled must still collect this agent's result.
+    return { success: false, agentSlug, error: `DB persist: ${dbErr?.message}`, latencyMs: response.latencyMs, costUsd };
+  }
 
   // 7. Audit event
   await faInsert('fa_audit_events', [{
