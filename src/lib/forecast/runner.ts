@@ -28,9 +28,10 @@ interface ModelResponse {
 // ── Provider callers ──────────────────────────────────────────────────────────
 
 // Per-call timeout: prevents a hung provider from blocking the entire round.
-// Promise.all in runAllAgentsOnRound waits for the slowest agent, so a single
-// unresponsive API would stall the full round. 45 s is generous for all models.
-const AGENT_TIMEOUT_MS = 45_000;
+// Promise.allSettled in runAllAgentsOnRound collects all agents regardless of
+// failures. 90 s accommodates slow providers (Gemini, xAI) under concurrent load:
+// 5 markets × 6 agents = 30 simultaneous API calls which can saturate endpoints.
+const AGENT_TIMEOUT_MS = 90_000;
 
 async function callAnthropic(
   modelId:      string,
@@ -281,12 +282,14 @@ export async function runAgentOnRound(
     const errorText = err?.message ?? String(err);
     console.error(`[FA/RUNNER] ${agentSlug} (${provider}/${modelId}) API error: ${errorText}`);
 
+    // Wrap DB writes so a transient Supabase error never propagates out of
+    // runAgentOnRound and causes Promise.allSettled to miss this agent's result.
     await faInsert('fa_submissions', [{
       round_id:        roundId,
       agent_id:        agentDb.id,
       probability_yes: 0.5,
       error_text:      errorText.slice(0, 2000),
-    }]);
+    }]).catch(dbErr => console.warn(`[FA/RUNNER] ${agentSlug} submission insert failed:`, dbErr?.message));
 
     await faInsert('fa_audit_events', [{
       event_type:   'agent_error',
@@ -294,7 +297,7 @@ export async function runAgentOnRound(
       entity_id:    roundId,
       actor:        agentSlug,
       payload_json: { error: errorText.slice(0, 500), model: modelId, provider },
-    }]);
+    }]).catch(() => {});
 
     return { success: false, agentSlug, error: errorText };
   }
@@ -316,7 +319,7 @@ export async function runAgentOnRound(
       cost_usd:        costUsd,
       latency_ms:      response.latencyMs,
       error_text:      'Failed to parse structured output',
-    }]);
+    }]).catch(dbErr => console.warn(`[FA/RUNNER] ${agentSlug} parse-fail insert failed:`, dbErr?.message));
 
     return { success: false, agentSlug, error: 'Parse error', latencyMs: response.latencyMs, costUsd };
   }
@@ -405,8 +408,16 @@ export async function runAllAgentsOnRound(
 
   console.log(`[FA/RUNNER] Running ${agents.length} active agents on round ${roundId}`);
 
-  const results = await Promise.all(
+  // Promise.allSettled: collect every agent's result regardless of rejections.
+  // One provider failure or DB error must not cause other agents' votes to be lost.
+  const settled = await Promise.allSettled(
     agents.map(a => runAgentOnRound(a.slug, roundId)),
+  );
+
+  const results: SubmissionResult[] = settled.map((s, i) =>
+    s.status === 'fulfilled'
+      ? s.value
+      : { success: false, agentSlug: agents[i].slug, error: String(s.reason) },
   );
 
   const succeeded = results.filter(r => r.success).length;
