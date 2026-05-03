@@ -110,9 +110,8 @@ async function callGoogle(
       contents: [{ role: 'user', parts: [{ text: userMessage }] }],
       generationConfig: {
         maxOutputTokens: maxTokens,
-        // Cap thinking budget so reasoning doesn't consume the full token allowance.
-        // thinkingBudget=8192 reserves the rest of the 32k window for JSON output.
-        thinkingConfig: { thinkingBudget: 8192 },
+        // Note: thinkingConfig (thinkingBudget) requires @google/generative-ai ≥ 0.25.
+        // Currently on 0.24.1 — upgrade package when available to cap CoT token usage.
       },
     }),
     new Promise<never>((_, reject) =>
