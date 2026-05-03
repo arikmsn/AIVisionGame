@@ -48,26 +48,14 @@ function authorizeAdmin(req: NextRequest): boolean {
 
 async function stepSyncMarkets(): Promise<{ ok: boolean; inserted: number; updated: number; error?: string }> {
   try {
-    // 1a. Standard volume-sorted sync (catches high-liquidity markets)
+    // 1a. Standard volume-sorted sync (catches high-liquidity markets).
+    //     Targeted sync (6 Polymarket tag calls × 25 markets) is intentionally
+    //     skipped in the cron path to stay within the function timeout budget.
+    //     Trigger it manually from the Admin panel when you want to pull in
+    //     politics/geopolitics/tech/crypto markets.
     const r1 = await syncMarketsToDb(50);
-
-    // 1b. Targeted events-based sync (adds politics/geopolitics/tech/crypto/ai/science)
-    //     Runs best-effort — a failure here doesn't abort the cycle.
-    let targeted = { inserted: 0, updated: 0 };
-    try {
-      const tMarkets = await fetchTargetedMarkets(25); // 25 per tag × 6 tags
-      if (tMarkets.length > 0) {
-        const r2 = await syncMarketsFromList(tMarkets);
-        targeted = { inserted: r2.inserted, updated: r2.updated };
-      }
-    } catch (te: any) {
-      console.warn('[DAILY] Step 1 targeted sync failed (non-fatal):', te?.message);
-    }
-
-    const inserted = r1.inserted + targeted.inserted;
-    const updated  = r1.updated  + targeted.updated;
-    console.log(`[DAILY] Step 1 sync: inserted=${inserted} updated=${updated} (targeted: +${targeted.inserted}i +${targeted.updated}u)`);
-    return { ok: true, inserted, updated };
+    console.log(`[DAILY] Step 1 sync: inserted=${r1.inserted} updated=${r1.updated} (targeted sync skipped in cron)`);
+    return { ok: true, inserted: r1.inserted, updated: r1.updated };
   } catch (err: any) {
     console.error('[DAILY] Step 1 sync error:', err?.message);
     return { ok: false, inserted: 0, updated: 0, error: err?.message };
@@ -214,8 +202,12 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
     let totalRounds    = 0;
     let totalPositions = 0;
 
-    for (const mId of marketIds) {
-      try {
+    // Run all markets in PARALLEL — agents within each round are also parallel.
+    // Promise.allSettled so a single slow/failing market doesn't block the others.
+    const { faPatch } = await import('@/lib/forecast/db');
+
+    const marketResults = await Promise.allSettled(
+      marketIds.map(async (mId) => {
         // Create round
         const existingRounds = await faSelect<{ round_number: number }>(
           'fa_rounds', `market_id=eq.${mId}&order=round_number.desc&limit=1&select=round_number`,
@@ -224,8 +216,8 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
         const mkt = await faSelect<{ current_yes_price: number; domain: string | null; close_time: string | null }>(
           'fa_markets', `id=eq.${mId}&select=current_yes_price,domain,close_time`,
         );
-        const yesPrice    = mkt[0]?.current_yes_price ?? null;
-        const mktDomain   = mkt[0]?.domain ?? null;
+        const yesPrice     = mkt[0]?.current_yes_price ?? null;
+        const mktDomain    = mkt[0]?.domain ?? null;
         const mktCloseTime = mkt[0]?.close_time ?? null;
 
         const inserted = await faInsert('fa_rounds', [{
@@ -238,19 +230,15 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
         }], { returning: true });
 
         const roundRow = Array.isArray(inserted) ? inserted[0] : null;
-        if (!roundRow) continue;
+        if (!roundRow) return { rounds: 0, positions: 0 };
         const roundId = (roundRow as any).id as string;
-        totalRounds++;
 
-        // Run agents on this round
-        await faSelect<{}>('fa_rounds', `id=eq.${roundId}&select=id`); // noop to confirm
-        // patch status to running
-        const { faPatch } = await import('@/lib/forecast/db');
+        // Run agents on this round (already parallelised inside runAllAgentsOnRound)
         await faPatch('fa_rounds', { id: roundId }, { status: 'running' });
         const results = await runAllAgentsOnRound(roundId, v2Pilot?.id, mId, mktDomain ?? undefined);
         await faPatch('fa_rounds', { id: roundId }, { status: 'completed' });
 
-        // ── Aggregate model votes → ONE system decision ───────────────────────
+        // ── Aggregate model votes → ONE system decision ──────────────────────
         const marketPrice = yesPrice != null ? Number(yesPrice) : 0;
 
         const votes: ModelVote[] = results
@@ -264,11 +252,11 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
 
         const decision = aggregateVotes(votes, marketPrice, bankrollBalance);
 
-        const { faPatch: fp } = await import('@/lib/forecast/db');
-        await fp('fa_rounds', { id: roundId }, {
+        await faPatch('fa_rounds', { id: roundId }, {
           context_json: { created_by: 'daily-cycle', system_decision: decisionSnapshot(decision) },
         }).catch(() => {});
 
+        let positionCount = 0;
         if (decision.action !== 'no_trade' && decision.nomineeSlug) {
           const agentRow = await faSelect<{ id: string }>(
             'fa_agents', `slug=eq.${decision.nomineeSlug}&select=id`,
@@ -281,11 +269,11 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
               roundId,
               decision,
             }).catch(() => null);
-            if (positionId) totalPositions++;
+            if (positionId) positionCount++;
           }
         }
 
-        // ── v2: upsert signal + process desired exposure ──────────────────
+        // ── v2: upsert signal + process desired exposure ─────────────────────
         try {
           await upsertSignalFromRound(
             mId,
@@ -293,7 +281,7 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
             mktDomain,
             decision,
             roundId,
-            null,   // freshnessHours — context system will add later
+            null,   // freshnessHours
             false,  // hasCooldown — risk engine checks this
           );
 
@@ -312,9 +300,17 @@ async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions
           console.warn(`[DAILY] v2 signal/position error for ${mId}: ${v2Err?.message}`);
         }
 
-        console.log(`[DAILY] Round for market ${mId}: ${results.filter(r => r.success).length} subs, ${totalPositions} pos`);
-      } catch (mktErr: any) {
-        console.error(`[DAILY] Round error for market ${mId}:`, mktErr?.message);
+        console.log(`[DAILY] Round ${mId}: ${results.filter(r => r.success).length} subs, decision=${decision.action}, edge=${decision.aggregatedEdge.toFixed(3)}`);
+        return { rounds: 1, positions: positionCount };
+      })
+    );
+
+    for (const res of marketResults) {
+      if (res.status === 'fulfilled') {
+        totalRounds    += res.value.rounds;
+        totalPositions += res.value.positions;
+      } else {
+        console.error('[DAILY] Market round failed:', res.reason?.message ?? res.reason);
       }
     }
 

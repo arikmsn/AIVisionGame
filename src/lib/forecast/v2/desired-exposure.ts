@@ -98,8 +98,10 @@ export function computeDesiredExposure(input: DesiredExposureInput): V2DesiredEx
     if (disagreement > V2_MAX_DISAGREEMENT_OPEN) {
       return flat(`disagreement ${disagreement.toFixed(3)} > max ${V2_MAX_DISAGREEMENT_OPEN}`, conviction, disagreement);
     }
-    if (conviction < 0.40) {
-      return flat(`conviction ${conviction.toFixed(3)} < 0.40`, conviction, disagreement);
+    if (conviction < 0.30) {
+      // Pilot phase: 0.30 floor (down from 0.40) to collect data across more markets.
+      // Raise once calibration shows which domains produce reliable signal.
+      return flat(`conviction ${conviction.toFixed(3)} < 0.30`, conviction, disagreement);
     }
     const size = Math.round(bankroll * V2_BASE_POSITION_PCT * 100) / 100;
     return {

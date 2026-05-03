@@ -27,13 +27,18 @@ interface ModelResponse {
 
 // ── Provider callers ──────────────────────────────────────────────────────────
 
+// Per-call timeout: prevents a hung provider from blocking the entire round.
+// Promise.all in runAllAgentsOnRound waits for the slowest agent, so a single
+// unresponsive API would stall the full round. 45 s is generous for all models.
+const AGENT_TIMEOUT_MS = 45_000;
+
 async function callAnthropic(
   modelId:      string,
   systemPrompt: string,
   userMessage:  string,
   maxTokens:    number,
 ): Promise<ModelResponse> {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: AGENT_TIMEOUT_MS });
   const start  = Date.now();
 
   const response = await client.messages.create({
@@ -64,7 +69,7 @@ async function callOpenAICompat(
   apiKey:       string | undefined,
   baseURL?:     string,
 ): Promise<ModelResponse> {
-  const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}), timeout: AGENT_TIMEOUT_MS });
   const start  = Date.now();
 
   const response = await client.chat.completions.create({
@@ -99,10 +104,15 @@ async function callGoogle(
   });
   const start = Date.now();
 
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
-    generationConfig: { maxOutputTokens: maxTokens },
-  });
+  const result = await Promise.race([
+    model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      generationConfig: { maxOutputTokens: maxTokens },
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Google API timeout after ${AGENT_TIMEOUT_MS}ms`)), AGENT_TIMEOUT_MS)
+    ),
+  ]);
 
   // Gemini 2.5 Pro is a thinking model: response.text() concatenates ALL parts
   // including thought=true parts, which pollutes the JSON with reasoning prose.

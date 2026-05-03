@@ -7,16 +7,25 @@
 
 // ── Domain priority thresholds ────────────────────────────────────────────────
 
-/** Minimum absolute edge (aggregated_p − market_price) required to open. */
+/**
+ * Minimum absolute edge (aggregated_p − market_price) required to open.
+ *
+ * Thresholds MUST be ≤ AGG_MIN_EDGE (0.10) in aggregator.ts so that any
+ * signal that passes the aggregator gate can also open a v2 position.
+ * Setting them higher silently kills valid trades before they ever execute.
+ *
+ * Pilot phase: keep all thresholds at 0.08 to maximise data collection.
+ * Raise selectively once per-domain Brier scores accumulate (≥30 resolutions).
+ */
 export const V2_MIN_ENTRY_EDGE: Record<string, number> = {
   politics:    0.08,
   geopolitics: 0.08,
   tech:        0.08,
   crypto:      0.08,
-  macro:       0.10,
-  culture:     0.10,
-  other:       0.12,
-  sports:      0.15,   // higher bar — low LLM edge per thesis
+  macro:       0.08,
+  culture:     0.08,
+  other:       0.08,
+  sports:      0.08,   // lowered from 0.15 — collect data first, raise later
 };
 
 /** Minimum edge to REVERSE (must be stronger than initial entry). */
@@ -26,7 +35,7 @@ export const V2_REVERSAL_EDGE_MULTIPLIER = 2.0;
 export const V2_REDUCE_EDGE_THRESHOLD    = 0.05;
 
 /** Disagreement (σ) above which we do NOT open new positions. */
-export const V2_MAX_DISAGREEMENT_OPEN    = 0.25;
+export const V2_MAX_DISAGREEMENT_OPEN    = 0.30;  // raised from 0.25 — pilot: allow moderate disagreement
 
 /** Disagreement above which we reduce existing positions. */
 export const V2_REDUCE_DISAGREEMENT      = 0.30;
