@@ -129,6 +129,13 @@ async function stepScoreMarkets(domain = 'sports', topN = 5): Promise<{ ok: bool
 }
 
 async function stepRefreshContext(domain = 'sports'): Promise<{ ok: boolean; refreshed: number; error?: string }> {
+  // LLM gate: news context is only useful as input to LLM agents. When disabled,
+  // skip the Anthropic summarisation entirely — saves tokens and ~10–20s of latency.
+  if (process.env.USE_LLM_AGENTS !== 'true') {
+    console.log('[DAILY] LLM disabled (USE_LLM_AGENTS!=true); skipping news context refresh');
+    return { ok: true, refreshed: 0 };
+  }
+
   try {
     const selected = await faSelect<{ market_id: string }>(
       'fa_market_scores',
@@ -166,6 +173,14 @@ async function stepRefreshContext(domain = 'sports'): Promise<{ ok: boolean; ref
 }
 
 async function stepRunRounds(): Promise<{ ok: boolean; rounds: number; positions: number; error?: string }> {
+  // LLM gate: rounds exist solely to call LLM agents and aggregate their votes.
+  // When disabled, skip entirely — no rounds created, no agents called, no
+  // signals upserted from rounds. MTM and tick run separately and are unaffected.
+  if (process.env.USE_LLM_AGENTS !== 'true') {
+    console.log('[DAILY] LLM disabled (USE_LLM_AGENTS!=true); skipping rounds + agent calls');
+    return { ok: true, rounds: 0, positions: 0 };
+  }
+
   try {
     // Get selected markets
     const selected = await faSelect<{ market_id: string }>(
