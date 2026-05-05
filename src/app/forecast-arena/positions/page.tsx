@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 import { sfetch } from '@/lib/forecast/db';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -383,6 +384,7 @@ export default async function PositionsPage() {
 
   return (
     <div>
+      <LegacyBanner pageName="Positions" />
       {/* Summary bar */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '28px', flexWrap: 'wrap' }}>
         {[

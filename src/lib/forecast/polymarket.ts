@@ -32,6 +32,12 @@ export interface PolymarketMarket {
   outcomes?:       string[];
   outcome_prices?: string;
   tokens?:         Array<{ outcome: string; price: number }>;
+  // Parent-event linkage (populated by fetchMarketsFromEvents). Required by
+  // the Pattern C calendar-monotonicity scanner to group same-question markets
+  // across different cutoff dates.
+  eventId?:        string;
+  eventSlug?:      string;
+  eventTitle?:     string;
 }
 
 export interface PolymarketSnapshot {
@@ -93,10 +99,16 @@ export async function fetchMarketsFromEvents(
   const data = await res.json();
   const events: any[] = Array.isArray(data) ? data : (data.events ?? data.data ?? []);
 
-  // Extract and flatten all nested markets, normalising field names
+  // Extract and flatten all nested markets, normalising field names.
+  // Capture parent event identity on each child market so the arbitrage scanner
+  // can group same-question markets across different cutoff dates (Pattern C).
   const markets: PolymarketMarket[] = [];
   for (const ev of events) {
     const nested: any[] = Array.isArray(ev.markets) ? ev.markets : [];
+    const evIdRaw   = ev.id ?? ev.eventId ?? ev.event_id ?? null;
+    const evId      = evIdRaw != null ? String(evIdRaw) : undefined;
+    const evSlug    = ev.slug  ?? undefined;
+    const evTitle   = ev.title ?? undefined;
     for (const m of nested) {
       // Events endpoint uses conditionId + question; normalise to PolymarketMarket shape
       markets.push({
@@ -111,6 +123,9 @@ export async function fetchMarketsFromEvents(
         volume:      m.volume ?? ev.volume ?? 0,
         endDate:     m.endDate ?? m.end_date_iso ?? ev.endDate,
         tokens:      m.tokens,
+        eventId:     evId,
+        eventSlug:   evSlug,
+        eventTitle:  evTitle,
       } as PolymarketMarket);
     }
   }
@@ -262,6 +277,12 @@ export async function syncMarketsFromList(markets: any[]): Promise<{
       const closeTime = extractCloseTime(m);
       const domainLabel = classifyMarketDomain(title, m.category ?? null);
 
+      // Parent-event linkage (only present when fetched via /events).
+      // Required by the Pattern C calendar-monotonicity scanner.
+      const eventId    = (m as any).eventId    ?? null;
+      const eventSlug  = (m as any).eventSlug  ?? null;
+      const eventTitle = (m as any).eventTitle ?? null;
+
       const row: Record<string, unknown> = {
         external_id:       externalId,
         source:            'polymarket',
@@ -274,6 +295,11 @@ export async function syncMarketsFromList(markets: any[]): Promise<{
         volume_usd:        volume,
         updated_at:        new Date().toISOString(),
         metadata_json: { slug: m.slug, image: m.image, outcomes: m.outcomes },
+        // Only write event_* if non-null so volume-sorted /markets fetches
+        // (which don't return parent events) don't clobber prior linkage.
+        ...(eventId    ? { event_id:    eventId    } : {}),
+        ...(eventSlug  ? { event_slug:  eventSlug  } : {}),
+        ...(eventTitle ? { event_title: eventTitle } : {}),
       };
 
       if (existingMap.has(externalId)) {

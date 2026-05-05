@@ -7,6 +7,7 @@
  */
 
 import { sfetch } from '@/lib/forecast/db';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -137,10 +138,11 @@ export default async function FinancePage() {
 
   return (
     <div>
+      <LegacyBanner pageName="Finance" />
       <div style={{ marginBottom: '28px' }}>
-        <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e8e8e8', margin: 0 }}>Finance</h1>
+        <h1 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e8e8e8', margin: 0 }}>Finance (legacy)</h1>
         <p style={{ color: '#555', fontSize: '0.73rem', marginTop: '4px' }}>
-          Central bankroll — trading capital separate from LLM costs
+          Paper-only. Central bankroll figures shown here reflect the v1 simulation; current pilot state is in Live Book
         </p>
       </div>
 

@@ -392,6 +392,54 @@ async function stepBenchmarks(): Promise<{ ok: boolean; rows: number; error?: st
   }
 }
 
+/**
+ * Pattern C — calendar monotonicity dry-run.
+ *
+ * Runs the scanner and writes the candidate list to fa_audit_events for
+ * 7-day analysis. RESEARCH MODE — does NOT persist to fa_arb_signals or
+ * open positions.
+ */
+async function stepArbDryRun(): Promise<{
+  ok: boolean;
+  candidates: number;
+  markets_considered: number;
+  error?: string;
+}> {
+  try {
+    const { scanCalendarMonotonicity } = await import('@/lib/forecast/arb/scanner');
+    const { candidates, stats } = await scanCalendarMonotonicity();
+
+    // Truncate candidates to keep the audit row small (jsonb has practical limits;
+    // 50 strongest signals is plenty for retrospective analysis).
+    const top = candidates.slice(0, 50);
+
+    await faInsert('fa_audit_events', [{
+      event_type:   'arb_scanner_dryrun',
+      entity_type:  'system',
+      entity_id:    null,
+      actor:        'daily-cycle',
+      payload_json: {
+        pattern:    'calendar_monotonic',
+        stats,
+        candidates: top,
+      },
+    }]).catch(() => {});
+
+    console.log(
+      `[DAILY] Step 8 arb dry-run: candidates=${stats.candidates_emitted} ` +
+      `markets=${stats.markets_considered} pairs=${stats.pairs_examined}`,
+    );
+    return {
+      ok:                 true,
+      candidates:         stats.candidates_emitted,
+      markets_considered: stats.markets_considered,
+    };
+  } catch (err: any) {
+    console.error('[DAILY] Step 8 arb dry-run error:', err?.message);
+    return { ok: false, candidates: 0, markets_considered: 0, error: err?.message };
+  }
+}
+
 // ── Handler ───────────────────────────────────────────────────────────────────
 
 async function runDailyCycle(trigger: string) {
@@ -406,9 +454,10 @@ async function runDailyCycle(trigger: string) {
   const mtm         = await stepMarkToMarket();
   const calibration = await stepCalibrationRollover();
   const benchmarks  = await stepBenchmarks();
+  const arb         = await stepArbDryRun();
 
   const elapsedMs = Date.now() - t0;
-  const steps     = { sync, score, context, rounds, tick, mtm, calibration, benchmarks };
+  const steps     = { sync, score, context, rounds, tick, mtm, calibration, benchmarks, arb };
   const allOk     = Object.values(steps).every(s => s.ok);
 
   // Record in audit log

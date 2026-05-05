@@ -15,6 +15,7 @@
 import Link from 'next/link';
 import { sfetch } from '@/lib/forecast/db';
 import { AGG_MIN_EDGE } from '@/lib/forecast/aggregator';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -281,6 +282,8 @@ export default async function DecisionsPage({
 
   return (
     <div>
+
+      <LegacyBanner pageName="Decisions" />
 
       {/* ── Page Header ── */}
       <div style={{ marginBottom: '28px' }}>

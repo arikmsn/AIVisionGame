@@ -3,6 +3,7 @@
  */
 
 import { sfetch } from '@/lib/forecast/db';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,7 @@ export default async function LedgerPage() {
 
   return (
     <div>
+      <LegacyBanner pageName="Ledger" />
       {/* ── Summary ── */}
       <div style={{ display: 'flex', gap: '14px', marginBottom: '28px', flexWrap: 'wrap' }}>
         {[

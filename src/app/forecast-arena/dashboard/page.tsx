@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { sfetch } from '@/lib/forecast/db';
 import OperatorActions from '../_components/OperatorActions';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -291,6 +292,8 @@ export default async function DashboardPage() {
 
   return (
     <div>
+
+      <LegacyBanner pageName="Dashboard" />
 
       {/* ── Strategy Context Strip ── */}
       {experimentCfg && (

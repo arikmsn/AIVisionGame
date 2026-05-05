@@ -214,10 +214,55 @@ export default async function LiveBookPage() {
   return (
     <div style={{ color: '#e5e7eb', fontFamily: 'monospace' }}>
 
+      {/* ── Mode banner: paper-only, no real money, current strategy state ── */}
+      <div style={{
+        display:      'flex',
+        flexWrap:     'wrap',
+        gap:          12,
+        alignItems:   'center',
+        background:   '#1f1a08',
+        border:       '1px solid #b45309',
+        borderRadius: 8,
+        padding:      '10px 14px',
+        marginBottom: 16,
+        fontSize:     '0.78rem',
+      }}>
+        <span style={{
+          background: '#f59e0b', color: '#1f1408', fontWeight: 700,
+          padding: '2px 8px', borderRadius: 4, fontSize: '0.72rem', letterSpacing: 0.5,
+        }}>PAPER MODE</span>
+        <span style={{ color: '#fcd34d' }}>
+          No exchange, broker, or wallet connected. $1,000 simulated bankroll.
+        </span>
+        <span style={{ color: '#9ca3af', borderLeft: '1px solid #374151', paddingLeft: 12 }}>
+          Trading mode: <b style={{ color: '#e5e7eb' }}>paper</b>
+          {' · '}
+          Strategy: <b style={{ color: '#e5e7eb' }}>scanner research</b>
+          {' · '}
+          LLM cron: <b style={{ color: '#f87171' }}>disabled</b>
+        </span>
+      </div>
+
+      {/* ── System status note ── */}
+      <div style={{
+        background: '#0a0f1a',
+        border:     '1px solid #1e293b',
+        borderRadius: 8,
+        padding:    '8px 14px',
+        marginBottom: 20,
+        fontSize:   '0.75rem',
+        color:      '#9ca3af',
+        lineHeight: 1.6,
+      }}>
+        <b style={{ color: '#cbd5e1' }}>System status</b> — Paper pilot active. LLM trading currently disabled in cron.
+        Market sync, mark-to-market, and the Pattern C arbitrage scanner (research mode) remain active.
+        No real funds are deposited or at risk.
+      </div>
+
       {/* ── Title ── */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700, color: '#fff' }}>Live Book</h1>
-        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Phase 1 Pilot — $1,000 bankroll</span>
+        <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Phase 1 Pilot — $1,000 simulated bankroll (paper)</span>
       </div>
 
       {/* ── Pilot status bar ── */}

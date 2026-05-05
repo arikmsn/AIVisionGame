@@ -3,6 +3,7 @@
  */
 
 import { sfetch } from '@/lib/forecast/db';
+import { LegacyBanner } from '../_components/LegacyBanner';
 
 export const dynamic = 'force-dynamic';
 
@@ -176,6 +177,8 @@ export default async function StrategyPage() {
 
   return (
     <div>
+
+      <LegacyBanner pageName="Experiment" />
 
       {/* A. Strategy Header */}
       <section style={{ marginBottom: '28px' }}>
